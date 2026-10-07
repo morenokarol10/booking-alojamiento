@@ -70,4 +70,41 @@ describe('alojamiento mapper', () => {
     expect(entity).not.toHaveProperty('proveedor_id');
     expect(entity).not.toHaveProperty('precio_base_noche');
   });
+
+  it.each([
+    ['null coordinates', null],
+    ['a non-object JSON value', 'not coordinates'],
+    [
+      'coordinates with an invalid latitude',
+      { latitud: 'invalid', longitud: -78.51 },
+    ],
+    ['coordinates missing a longitude', { latitud: -0.22 }],
+  ])(
+    'uses Quito coordinates when Supabase returns %s',
+    (_description, value) => {
+      const entity = toAlojamientoEntity({
+        id: '10000000-0000-4000-8000-000000000001',
+        proveedor_id: '20000000-0000-4000-8000-000000000001',
+        nombre: 'Suite Quito',
+        descripcion: null,
+        tipo: 'hotel',
+        ciudad: 'Quito',
+        direccion: 'Centro Histórico',
+        coordenadas: value,
+        precio_base_noche: '85.00',
+        moneda: 'USD',
+        capacidad_maxima: 4,
+        habitaciones_disponibles: 2,
+        servicios: ['wifi'],
+        politica_cancelacion: null,
+        imagenes: ['https://example.com/room.jpg'],
+        created_at: '2026-10-07T00:00:00.000Z',
+      });
+
+      expect(entity.coordenadas).toEqual({
+        latitud: -0.1807,
+        longitud: -78.4678,
+      });
+    },
+  );
 });

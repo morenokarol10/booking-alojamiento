@@ -6,6 +6,11 @@ import type {
 import type { CreateAlojamientoDto } from '../dto/create-alojamiento.dto';
 import type { UpdateAlojamientoDto } from '../dto/update-alojamiento.dto';
 
+const DEFAULT_COORDINATES: CoordenadasEntity = {
+  latitud: -0.1807,
+  longitud: -78.4678,
+};
+
 export function toAlojamientoDatabase(
   dto: CreateAlojamientoDto | UpdateAlojamientoDto,
 ): Record<string, unknown> {
@@ -53,13 +58,6 @@ export function toAlojamientoEntity(
     );
   }
 
-  const coordinates = row.coordenadas;
-  if (!isRecord(coordinates)) {
-    throw new InternalServerErrorException(
-      'Supabase devolvió coordenadas de alojamiento no válidas.',
-    );
-  }
-
   return {
     id: requireString(row.id, 'id'),
     proveedorId: requireString(row.proveedor_id, 'proveedor_id'),
@@ -68,7 +66,7 @@ export function toAlojamientoEntity(
     tipo: row.tipo,
     ciudad: requireString(row.ciudad, 'ciudad'),
     direccion: requireString(row.direccion, 'direccion'),
-    coordenadas: mapCoordinates(coordinates),
+    coordenadas: mapCoordinates(row.coordenadas),
     precioBaseNoche: requireNumber(row.precio_base_noche, 'precio_base_noche'),
     moneda: requireString(row.moneda, 'moneda'),
     capacidadMaxima: requireNumber(row.capacidad_maxima, 'capacidad_maxima'),
@@ -83,11 +81,27 @@ export function toAlojamientoEntity(
   };
 }
 
-function mapCoordinates(value: Record<string, unknown>): CoordenadasEntity {
-  return {
-    latitud: requireNumber(value.latitud, 'coordenadas.latitud'),
-    longitud: requireNumber(value.longitud, 'coordenadas.longitud'),
-  };
+function mapCoordinates(value: unknown): CoordenadasEntity {
+  if (!isRecord(value)) return { ...DEFAULT_COORDINATES };
+
+  const latitud = coordinateNumber(value.latitud);
+  const longitud = coordinateNumber(value.longitud);
+  if (latitud === null || longitud === null) {
+    return { ...DEFAULT_COORDINATES };
+  }
+
+  return { latitud, longitud };
+}
+
+function coordinateNumber(value: unknown): number | null {
+  if (
+    (typeof value !== 'number' &&
+      (typeof value !== 'string' || value.trim() === '')) ||
+    !Number.isFinite(Number(value))
+  ) {
+    return null;
+  }
+  return Number(value);
 }
 
 function requireString(value: unknown, field: string): string {

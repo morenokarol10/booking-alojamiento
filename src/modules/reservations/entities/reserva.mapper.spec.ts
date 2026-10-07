@@ -16,12 +16,14 @@ describe('reserva mapper', () => {
   it('maps booking request and simulated successful payment to database columns', () => {
     expect(
       toReservaDatabase(dto, {
+        clienteId: '50000000-0000-4000-8000-000000000001',
         precioTotal: 255,
         moneda: 'USD',
         pagoReferencia: '30000000-0000-4000-8000-000000000001',
       }),
     ).toEqual({
       alojamiento_id: dto.alojamientoId,
+      cliente_id: '50000000-0000-4000-8000-000000000001',
       cliente_nombre: dto.clienteNombre,
       cliente_email: dto.clienteEmail,
       cliente_telefono: dto.clienteTelefono,

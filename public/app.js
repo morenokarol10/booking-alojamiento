@@ -255,6 +255,10 @@ async function submitBooking(event) {
   event.preventDefault();
   const form = event.currentTarget;
   if (!form.reportValidity() || !selectedListing) return;
+  if (!window.BookingAuth.token()) {
+    window.BookingAuth.goToLogin('/marketplace/');
+    return;
+  }
 
   const submitButton = form.querySelector('button[type="submit"]');
   const originalText = submitButton.textContent;
@@ -278,9 +282,17 @@ async function submitBooking(event) {
   try {
     const response = await fetch(`${API_BASE}/reservas`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${window.BookingAuth.token()}`,
+      },
       body: JSON.stringify(payload),
     });
+    if (response.status === 401) {
+      window.BookingAuth.clearSession();
+      window.BookingAuth.goToLogin('/marketplace/');
+      return;
+    }
     const body = await readResponse(response);
     detailDialog.close();
     successMessage.textContent = `Hemos recibido tu solicitud para ${selectedListing.nombre}. ¡Prepárate para disfrutar tu estadía!`;
@@ -293,6 +305,36 @@ async function submitBooking(event) {
   } finally {
     submitButton.disabled = false;
     submitButton.textContent = originalText;
+  }
+}
+
+async function initializeMarketplace() {
+  const adminLink = document.querySelector('#admin-mode-link');
+  const accountLink = document.querySelector('#account-link');
+  const token = window.BookingAuth.token();
+  if (token) {
+    try {
+      const user = await window.BookingAuth.fetchProfile();
+      if (user?.role === 'admin') {
+        adminLink.hidden = false;
+      }
+      if (user) {
+        accountLink.textContent = 'Cerrar sesión';
+        accountLink.href = '#';
+        accountLink.addEventListener('click', (event) => {
+          event.preventDefault();
+          window.BookingAuth.clearSession();
+          window.location.reload();
+        });
+      }
+    } catch {
+      accountLink.textContent = 'Reintentar sesión';
+      accountLink.href = '/login/';
+    }
+  }
+  loadListings();
+  if (new URLSearchParams(window.location.search).get('accessDenied') === '1') {
+    showToast('Acceso denegado: esta cuenta no tiene rol de administrador.');
   }
 }
 
@@ -341,4 +383,4 @@ successDialog.addEventListener('click', (event) => {
   if (event.target === successDialog) successDialog.close();
 });
 
-loadListings();
+void initializeMarketplace();

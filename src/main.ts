@@ -20,6 +20,7 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   app.use('/marketplace', express.static(join(process.cwd(), 'public')));
+  app.use('/login', express.static(join(process.cwd(), 'public', 'login')));
   app.use('/admin', express.static(join(process.cwd(), 'public', 'admin')));
   app.enableCors();
   app.useGlobalPipes(
@@ -47,6 +48,10 @@ async function bootstrap() {
     .setTitle(officialContract.info.title)
     .setDescription(officialContract.info.description)
     .setVersion(officialContract.info.version)
+    .addBearerAuth(
+      { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
+      'supabase-jwt',
+    )
     .addTag('Alojamientos', 'Gestión de hoteles y habitaciones')
     .addTag('Reservas', 'Flujo de reservas')
     .addTag('Administración', 'Operaciones administrativas')

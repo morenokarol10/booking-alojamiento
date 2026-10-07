@@ -1,6 +1,7 @@
 -- Esquema de Alojamientos para PostgreSQL / Supabase.
 -- Ejecutar en un proyecto nuevo o aplicar la migración si ya existía el
--- esquema anterior: database/migrations/20261007_contract_alignment.sql
+-- esquema anterior: database/migrations/20261007_contract_alignment.sql y
+-- database/migrations/20261008_auth_and_rls.sql
 
 CREATE TABLE IF NOT EXISTS public.alojamientos (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -27,6 +28,7 @@ CREATE TABLE IF NOT EXISTS public.reservas (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   alojamiento_id UUID NOT NULL
     REFERENCES public.alojamientos (id) ON DELETE RESTRICT,
+  cliente_id UUID REFERENCES auth.users (id) ON DELETE SET NULL,
   cliente_nombre TEXT NOT NULL,
   cliente_email TEXT NOT NULL,
   cliente_telefono TEXT,
@@ -61,11 +63,27 @@ CREATE INDEX IF NOT EXISTS alojamientos_precio_idx
 CREATE INDEX IF NOT EXISTS reservas_alojamiento_id_idx
   ON public.reservas (alojamiento_id);
 
+CREATE INDEX IF NOT EXISTS reservas_cliente_id_idx
+  ON public.reservas (cliente_id);
+
 CREATE INDEX IF NOT EXISTS reservas_fechas_idx
   ON public.reservas (fecha_checkin, fecha_checkout);
 
 CREATE INDEX IF NOT EXISTS eventos_log_creado_en_idx
   ON public.eventos_log (creado_en DESC);
+
+ALTER TABLE public.alojamientos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.reservas ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.eventos_log ENABLE ROW LEVEL SECURITY;
+
+REVOKE INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER
+  ON public.alojamientos FROM anon, authenticated;
+GRANT SELECT ON public.alojamientos TO anon, authenticated;
+REVOKE ALL ON public.reservas, public.eventos_log FROM anon, authenticated;
+
+DROP POLICY IF EXISTS alojamientos_public_read ON public.alojamientos;
+CREATE POLICY alojamientos_public_read
+  ON public.alojamientos FOR SELECT TO anon, authenticated USING (true);
 
 -- Alojamientos de ejemplo en destinos reales de Ecuador.
 INSERT INTO public.alojamientos (

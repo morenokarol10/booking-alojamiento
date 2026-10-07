@@ -73,6 +73,9 @@ async function apiRequest(path, options = {}) {
       ...options,
       headers: {
         ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+        ...(window.BookingAuth.token()
+          ? { Authorization: `Bearer ${window.BookingAuth.token()}` }
+          : {}),
         ...options.headers,
       },
     });
@@ -83,6 +86,15 @@ async function apiRequest(path, options = {}) {
   }
 
   const body = await response.json().catch(() => null);
+  if (response.status === 401) {
+    window.BookingAuth.clearSession();
+    window.BookingAuth.goToLogin('/admin/');
+    throw new Error('Tu sesión expiró. Inicia sesión nuevamente.');
+  }
+  if (response.status === 403) {
+    window.location.assign('/marketplace/?accessDenied=1');
+    throw new Error('Esta cuenta no tiene permisos de administrador.');
+  }
   if (!response.ok) {
     const message = body?.message;
     throw new Error(
@@ -540,4 +552,33 @@ document
       .classList.toggle('mobile-open', !expanded);
   });
 
-Promise.all([loadListings(), loadBookings(), loadEvents()]);
+async function initializeAdmin() {
+  try {
+    const user = await window.BookingAuth.fetchProfile();
+    if (!user) {
+      window.BookingAuth.goToLogin('/admin/');
+      return;
+    }
+    if (user.role !== 'admin') {
+      window.location.assign('/marketplace/?accessDenied=1');
+      return;
+    }
+
+    const profile = document.querySelector('.profile-link');
+    profile.querySelector('strong').textContent = user.email || 'Administrador';
+    profile.querySelector('small').textContent = 'Sesión de administrador';
+    document.querySelector('#logout-button').addEventListener('click', () => {
+      window.BookingAuth.clearSession();
+      window.location.assign('/marketplace/');
+    });
+    document.body.classList.remove('auth-pending');
+    document.querySelector('#admin-auth-check').hidden = true;
+    await Promise.all([loadListings(), loadBookings(), loadEvents()]);
+  } catch (error) {
+    const check = document.querySelector('#admin-auth-check');
+    check.textContent = `${error.message} Recarga la página para intentarlo de nuevo.`;
+    check.classList.add('error');
+  }
+}
+
+void initializeAdmin();

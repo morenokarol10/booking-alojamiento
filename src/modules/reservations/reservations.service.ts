@@ -9,6 +9,7 @@ import {
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { SUPABASE_CLIENT } from '../../supabase/supabase.module';
 import { CreateReservaDto } from './dto/create-reserva.dto';
+import type { AuthenticatedUser } from '../auth/auth.types';
 import { toReservaDatabase, toReservaEntity } from './entities/reserva.mapper';
 
 @Injectable()
@@ -17,7 +18,7 @@ export class ReservationsService {
     @Inject(SUPABASE_CLIENT) private readonly supabase: SupabaseClient,
   ) {}
 
-  async create(dto: CreateReservaDto) {
+  async create(dto: CreateReservaDto, user: AuthenticatedUser) {
     const nights = this.getNights(dto.fechaCheckin, dto.fechaCheckout);
     if (nights <= 0) {
       throw new BadRequestException(
@@ -88,6 +89,7 @@ export class ReservationsService {
           precioTotal,
           moneda: String(alojamiento.moneda),
           pagoReferencia,
+          clienteId: user.id,
         }),
       )
       .select('*')

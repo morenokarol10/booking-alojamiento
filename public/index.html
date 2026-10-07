@@ -11,6 +11,7 @@
     <title>Estadía — Encuentra tu próximo alojamiento</title>
     <link rel="preconnect" href="https://images.unsplash.com" />
     <link rel="stylesheet" href="/marketplace/styles.css" />
+    <script src="/marketplace/auth-client.js" defer></script>
     <script src="/marketplace/app.js" defer></script>
   </head>
   <body>
@@ -21,7 +22,10 @@
       </a>
       <nav class="header-nav" aria-label="Navegación principal">
         <a href="#alojamientos">Explorar estancias</a>
-        <a class="host-link" href="/admin/">Modo Administración</a>
+        <a class="host-link" id="admin-mode-link" href="/admin/" hidden
+          >Modo Administración</a
+        >
+        <a class="host-link" id="account-link" href="/login/">Iniciar sesión</a>
       </nav>
     </header>
 

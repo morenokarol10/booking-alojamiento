@@ -9,12 +9,14 @@ import type { CreateReservaDto } from '../dto/create-reserva.dto';
 export function toReservaDatabase(
   dto: CreateReservaDto,
   values: {
+    clienteId: string;
     precioTotal: number;
     moneda: string;
     pagoReferencia: string;
   },
 ): Record<string, unknown> {
   return {
+    cliente_id: values.clienteId,
     alojamiento_id: dto.alojamientoId,
     cliente_nombre: dto.clienteNombre,
     cliente_email: dto.clienteEmail,

@@ -1339,3 +1339,34 @@ textarea:focus-visible {
     transition-duration: 0.01ms !important;
   }
 }
+body.auth-pending .sidebar,
+body.auth-pending .app-shell {
+  visibility: hidden;
+}
+
+.auth-check {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  padding: 24px;
+  color: #456a52;
+  background: #f5f6f3;
+  text-align: center;
+  font-size: 14px;
+}
+
+.auth-check.error {
+  color: #963e32;
+}
+
+.logout-button {
+  padding: 9px 13px;
+  border: 1px solid #e1e5df;
+  border-radius: 7px;
+  background: white;
+  color: #456a52;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}

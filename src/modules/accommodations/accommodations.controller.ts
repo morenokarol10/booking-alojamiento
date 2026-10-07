@@ -8,8 +8,10 @@ import {
   Post,
   Put,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import {
+  ApiBearerAuth,
   ApiBadRequestResponse,
   ApiCreatedResponse,
   ApiNotFoundResponse,
@@ -19,10 +21,15 @@ import {
   ApiQuery,
   ApiResponse,
   ApiTags,
+  ApiForbiddenResponse,
+  ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsNumber, IsOptional, IsString, Min } from 'class-validator';
 import { AccommodationsService } from './accommodations.service';
+import { Roles } from '../auth/auth.decorators';
+import { RolesGuard } from '../auth/roles.guard';
+import { SupabaseAuthGuard } from '../auth/supabase-auth.guard';
 import { CreateAlojamientoDto } from './dto/create-alojamiento.dto';
 import { UpdateAlojamientoDto } from './dto/update-alojamiento.dto';
 import {
@@ -82,6 +89,11 @@ export class AccommodationsController {
   }
 
   @Post()
+  @UseGuards(SupabaseAuthGuard, RolesGuard)
+  @Roles('admin')
+  @ApiBearerAuth('supabase-jwt')
+  @ApiUnauthorizedResponse({ description: 'Token ausente o no válido.' })
+  @ApiForbiddenResponse({ description: 'Se requiere rol admin.' })
   @ApiOperation({ summary: 'Crear un alojamiento (Administración)' })
   @ApiCreatedResponse({
     description: 'Alojamiento creado.',
@@ -94,6 +106,11 @@ export class AccommodationsController {
   }
 
   @Put(':id')
+  @UseGuards(SupabaseAuthGuard, RolesGuard)
+  @Roles('admin')
+  @ApiBearerAuth('supabase-jwt')
+  @ApiUnauthorizedResponse({ description: 'Token ausente o no válido.' })
+  @ApiForbiddenResponse({ description: 'Se requiere rol admin.' })
   @ApiOperation({ summary: 'Actualizar un alojamiento (Administración)' })
   @ApiParam({ name: 'id', format: 'uuid' })
   @ApiOkResponse({
@@ -111,6 +128,11 @@ export class AccommodationsController {
   }
 
   @Delete(':id')
+  @UseGuards(SupabaseAuthGuard, RolesGuard)
+  @Roles('admin')
+  @ApiBearerAuth('supabase-jwt')
+  @ApiUnauthorizedResponse({ description: 'Token ausente o no válido.' })
+  @ApiForbiddenResponse({ description: 'Se requiere rol admin.' })
   @ApiOperation({ summary: 'Eliminar un alojamiento (Administración)' })
   @ApiParam({ name: 'id', format: 'uuid' })
   @ApiOkResponse({

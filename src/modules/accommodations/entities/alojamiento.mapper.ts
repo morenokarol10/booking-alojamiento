@@ -82,12 +82,20 @@ export function toAlojamientoEntity(
 }
 
 function mapCoordinates(value: unknown): CoordenadasEntity {
-  if (!isRecord(value)) return { ...DEFAULT_COORDINATES };
+  if (!isRecord(value)) {
+    return {
+      latitud: DEFAULT_COORDINATES.latitud,
+      longitud: DEFAULT_COORDINATES.longitud,
+    };
+  }
 
   const latitud = coordinateNumber(value.latitud);
   const longitud = coordinateNumber(value.longitud);
   if (latitud === null || longitud === null) {
-    return { ...DEFAULT_COORDINATES };
+    return {
+      latitud: DEFAULT_COORDINATES.latitud,
+      longitud: DEFAULT_COORDINATES.longitud,
+    };
   }
 
   return { latitud, longitud };

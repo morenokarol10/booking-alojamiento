@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f8f7f4" />
+    <title>Acceso — Estadía</title>
+    <link rel="stylesheet" href="/login/login.css" />
+    <script src="/marketplace/auth-client.js" defer></script>
+    <script src="/login/login.js" defer></script>
+  </head>
+  <body>
+    <header class="header">
+      <a class="brand" href="/marketplace/"
+        ><span class="mark">e</span> estadía</a
+      >
+      <a href="/marketplace/">Volver al Marketplace</a>
+    </header>
+    <main class="auth-layout">
+      <section class="auth-card" aria-labelledby="auth-title">
+        <span class="eyebrow">TU PRÓXIMA HISTORIA EMPIEZA AQUÍ</span>
+        <h1 id="auth-title">Bienvenido</h1>
+        <p id="auth-description">Inicia sesión para continuar con tu viaje.</p>
+        <div class="tabs" role="tablist" aria-label="Acceso a tu cuenta">
+          <button
+            class="tab active"
+            id="login-tab"
+            type="button"
+            role="tab"
+            aria-selected="true"
+          >
+            Iniciar sesión
+          </button>
+          <button
+            class="tab"
+            id="register-tab"
+            type="button"
+            role="tab"
+            aria-selected="false"
+          >
+            Crear cuenta
+          </button>
+        </div>
+        <form id="login-form" novalidate>
+          <label for="login-email">Correo electrónico</label>
+          <input
+            id="login-email"
+            name="email"
+            type="email"
+            autocomplete="email"
+            required
+          />
+          <label for="login-password">Contraseña</label>
+          <input
+            id="login-password"
+            name="password"
+            type="password"
+            autocomplete="current-password"
+            required
+          />
+          <button class="submit-button" type="submit">Iniciar sesión</button>
+        </form>
+        <form id="register-form" hidden novalidate>
+          <label for="register-email">Correo electrónico</label>
+          <input
+            id="register-email"
+            name="email"
+            type="email"
+            autocomplete="email"
+            required
+          />
+          <label for="register-password"
+            >Contraseña (mínimo 12 caracteres)</label
+          >
+          <input
+            id="register-password"
+            name="password"
+            type="password"
+            autocomplete="new-password"
+            minlength="12"
+            required
+          />
+          <button class="submit-button" type="submit">
+            Crear cuenta de cliente
+          </button>
+        </form>
+        <p
+          class="notice"
+          id="auth-notice"
+          role="status"
+          aria-live="polite"
+          hidden
+        ></p>
+        <p class="security-note">
+          Las cuentas nuevas se registran como clientes. El acceso de
+          administrador requiere credenciales asignadas por el sistema.
+        </p>
+      </section>
+    </main>
+  </body>
+</html>

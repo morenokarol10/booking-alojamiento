@@ -16,9 +16,13 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="/admin/admin.css" />
+    <script src="/marketplace/auth-client.js" defer></script>
     <script src="/admin/admin.js" defer></script>
   </head>
-  <body>
+  <body class="auth-pending">
+    <div class="auth-check" id="admin-auth-check" role="status">
+      Verificando sesión de administrador…
+    </div>
     <aside class="sidebar">
       <a class="brand" href="/marketplace/" aria-label="Estadía">
         <span class="brand-mark" aria-hidden="true">e</span>
@@ -84,6 +88,9 @@
               >Modo Administración</a
             >
           </div>
+          <button class="logout-button" id="logout-button" type="button">
+            Cerrar sesión
+          </button>
           <button
             class="mobile-menu-button"
             id="mobile-menu-button"

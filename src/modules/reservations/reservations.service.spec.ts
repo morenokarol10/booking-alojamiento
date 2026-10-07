@@ -114,19 +114,27 @@ describe('ReservationsService payment and event flow', () => {
     } as unknown as SupabaseClient;
     const service = new ReservationsService(supabaseStub);
 
-    const response = await service.create({
-      alojamientoId: accommodation.id,
-      clienteNombre: 'María Pérez',
-      clienteEmail: 'maria@example.com',
-      clienteTelefono: '+593991234567',
-      fechaCheckin: '2026-11-10',
-      fechaCheckout: '2026-11-13',
-      numHuespedes: 2,
-      metodoPagoSimulado: 'tarjeta',
-    });
+    const response = await service.create(
+      {
+        alojamientoId: accommodation.id,
+        clienteNombre: 'María Pérez',
+        clienteEmail: 'maria@example.com',
+        clienteTelefono: '+593991234567',
+        fechaCheckin: '2026-11-10',
+        fechaCheckout: '2026-11-13',
+        numHuespedes: 2,
+        metodoPagoSimulado: 'tarjeta',
+      },
+      {
+        id: '50000000-0000-4000-8000-000000000001',
+        email: 'maria@example.com',
+        role: 'cliente',
+      },
+    );
 
     expect(inserts.reservas[0]).toMatchObject({
       alojamiento_id: accommodation.id,
+      cliente_id: '50000000-0000-4000-8000-000000000001',
       cliente_nombre: 'María Pérez',
       fecha_checkin: '2026-11-10',
       fecha_checkout: '2026-11-13',

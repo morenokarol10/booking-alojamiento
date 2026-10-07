@@ -32,9 +32,10 @@ y dos interfaces web responsivas: Marketplace público y Panel de Administració
 flowchart LR
     Guest[Huésped] -->|Navega y reserva| Marketplace[Marketplace<br/>HTML, CSS, JS]
     Admin[Administrador] -->|Gestiona y monitorea| Panel[Panel Admin<br/>HTML, CSS, JS]
-    Marketplace -->|Fetch REST /api/v1| API[NestJS<br/>Alojamientos · Reservas · Admin]
+    Marketplace -->|JWT Bearer · Fetch REST /api/v1| API[NestJS<br/>Auth · Alojamientos · Reservas · Admin]
     Panel -->|Fetch REST /api/v1| API
     API -->|SDK @supabase/supabase-js| Supabase[(Supabase<br/>PostgreSQL)]
+    API -->|Verifica JWT / Supabase Auth| Auth[Supabase Auth]
     API -->|Inserta ReservaRealizadaEvent| EventLog[(eventos_log)]
     Supabase --- Data[(alojamientos · reservas)]
 ```
@@ -79,6 +80,7 @@ erDiagram
     RESERVAS {
         uuid id PK
         uuid alojamiento_id FK
+        uuid cliente_id FK
         text cliente_nombre
         text cliente_email
         text cliente_telefono
@@ -116,6 +118,8 @@ incluyas claves reales en Git):
 ```env
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_KEY=your-supabase-anon-or-publishable-key
+SUPABASE_SERVICE_ROLE_KEY=your-private-supabase-service-role-key
+ADMIN_SEED_PASSWORD=replace-with-a-unique-password-of-at-least-12-characters
 PORT=3000
 ```
 
@@ -124,7 +128,43 @@ Instala dependencias y ejecuta `npm install`, luego inicia con
 
 - Swagger: `http://localhost:3000/api/docs`
 - Marketplace: `http://localhost:3000/marketplace/`
+- Login/registro: `http://localhost:3000/login/`
 - Panel Admin: `http://localhost:3000/admin/`
+
+#### Autenticación y roles
+
+- `POST /api/v1/auth/register` crea únicamente cuentas `cliente`; el cuerpo no
+  acepta ningún campo de rol.
+- `POST /api/v1/auth/login` devuelve un JWT de Supabase Auth y el rol del
+  usuario. El navegador conserva el access token en `sessionStorage`.
+- `GET /api/v1/auth/me` valida el token Bearer y devuelve el perfil autenticado.
+- El rol se lee exclusivamente de `app_metadata.role` (administrado por el
+  servidor), nunca de `user_metadata` ni de valores enviados por el cliente.
+- La creación de reservas requiere un usuario `cliente`; el `cliente_id` se
+  toma del JWT verificado y no se acepta desde el cuerpo.
+- La consulta de reservas, `/api/v1/admin/*` y las escrituras CRUD de
+  alojamientos requieren `admin`. El catálogo `GET /api/v1/alojamientos`
+  permanece público.
+- Las políticas RLS dejan el catálogo en lectura pública y bloquean el acceso
+  directo de `anon`/`authenticated` a reservas, eventos y escrituras; NestJS
+  usa `SUPABASE_SERVICE_ROLE_KEY` únicamente en el servidor. Nunca se debe
+  publicar esa clave en HTML, JavaScript, Git ni variables `VITE_*`.
+
+Para crear o actualizar el administrador local, configura en `.env` la clave
+de servicio privada y `ADMIN_SEED_PASSWORD`. Para el usuario de prueba
+solicitado usa `admin@booking.ec` y guarda la contraseña temporal indicada
+para pruebas en `ADMIN_SEED_PASSWORD`, solo en un entorno de desarrollo
+aislado. El script fija `app_metadata.role` como `admin`, confirma el correo y
+reinicia la contraseña al ejecutarse:
+
+```powershell
+npm run seed:admin
+```
+
+No se incluye esa contraseña en código ni en archivos versionados. Cámbiala
+antes de publicar; nunca uses la contraseña de prueba en producción. Protege la
+clave service-role con los secretos del entorno y rota cualquier clave que
+haya sido expuesta.
 
 La API devuelve claves camelCase y mapea las columnas snake_case de PostgreSQL.
 Usa `GET/POST /api/v1/alojamientos`, `GET/PUT/DELETE
@@ -158,12 +198,17 @@ El repositorio incluye un [`Dockerfile`](./Dockerfile) multi-stage y
 2. En Render, selecciona **New + → Blueprint**, conecta el repositorio y
    confirma la creación del servicio `booking-alojamiento`.
 3. En **Dashboard → servicio → Environment**, configura
-   `SUPABASE_URL` y `SUPABASE_KEY` usando los valores del proyecto Supabase.
+   `SUPABASE_URL`, `SUPABASE_KEY` y `SUPABASE_SERVICE_ROLE_KEY` usando las claves
+   del proyecto Supabase. La service-role key es un secreto privado del
+   backend; no la compartas con el navegador.
    `render.yaml` las declara como secretos no sincronizados (`sync: false`),
    por lo que Render solicitará sus valores.
 4. Ejecuta [`database/schema.sql`](./database/schema.sql) en el SQL Editor de
-   Supabase. Espera a que el despliegue indique **Live** y verifica los
-   endpoints y páginas públicas.
+   Supabase para una base nueva. En una instalación existente, aplica también
+   [`database/migrations/20261008_auth_and_rls.sql`](./database/migrations/20261008_auth_and_rls.sql)
+   después de la migración de alineación. Espera a que el despliegue indique
+   **Live**, ejecuta el sembrado admin como proceso local/one-off con los
+   secretos configurados y verifica el inicio de sesión.
 
 Render inyecta `PORT` automáticamente; la aplicación escucha en
 `process.env.PORT` y, si no se define, usa `3000` para desarrollo local. No es
@@ -176,13 +221,15 @@ docker run --rm -p 3000:10000 `
   -e PORT=10000 `
   -e SUPABASE_URL=https://your-project.supabase.co `
   -e SUPABASE_KEY=your-supabase-anon-or-publishable-key `
+  -e SUPABASE_SERVICE_ROLE_KEY=your-private-supabase-service-role-key `
   booking-alojamiento
 ```
 
 No pases secretos durante `docker build`, no los escribas en el Dockerfile ni
 los incluyas en el repositorio. Usa variables **Environment** secretas del
-servicio Render; la clave debe ser una clave `anon`/publishable con permisos
-limitados por RLS. No uses una `service_role`/secret key en este prototipo.
+servicio Render. `SUPABASE_KEY` es la clave anon/publishable para Auth;
+`SUPABASE_SERVICE_ROLE_KEY` solo se configura como secreto backend para acceder
+a datos detrás de los guards de NestJS.
 
 #### Enlaces públicos
 
@@ -196,12 +243,10 @@ dominio de ejemplo por el que figure en **Settings → Domains**:
 
 Los enlaces anteriores quedan activos únicamente después del despliegue exitoso.
 
-> **Seguridad antes de publicar:** el Panel Admin y las operaciones de crear,
-> actualizar y eliminar alojamientos todavía no tienen autenticación ni
-> autorización. CORS no es control de acceso. Protege las rutas con
-> autenticación/autorización (por ejemplo, Supabase Auth y roles) y aplica
-> políticas RLS de mínimo privilegio antes de usar datos reales o anunciar el
-> panel como seguro. Una clave Supabase de backend no sustituye esos controles.
+> **Operación segura:** la service-role key elude RLS y, por ello, solo debe
+> existir en el backend. RLS protege el acceso directo de los clientes; los
+> guards de NestJS protegen los endpoints del API. Mantén ambas capas y usa una
+> contraseña admin única, fuerte y rotada en producción.
 
 ### Próximas integraciones SOA/EDA (Reto 2)
 

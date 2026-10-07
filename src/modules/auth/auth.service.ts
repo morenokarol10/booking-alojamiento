@@ -3,6 +3,7 @@ import {
   Inject,
   InternalServerErrorException,
   Injectable,
+  Logger,
   UnauthorizedException,
 } from '@nestjs/common';
 import type { SupabaseClient, User } from '@supabase/supabase-js';
@@ -13,6 +14,8 @@ import { RegisterDto } from './dto/register.dto';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     @Inject(SUPABASE_AUTH_CLIENT)
     private readonly supabase: SupabaseClient,
@@ -24,10 +27,13 @@ export class AuthService {
       password: dto.password,
     });
     if (error) {
+      this.logger.warn(
+        `Supabase Auth rechazó el registro (código: ${error.code ?? 'desconocido'}).`,
+      );
       throw new BadRequestException({
         statusCode: 400,
-        message: 'No se pudo crear la cuenta.',
-        error: error.message,
+        message: this.getRegistrationErrorMessage(error.code),
+        error: error.code ?? 'supabase_auth_error',
       });
     }
     if (!data.user) {
@@ -97,5 +103,23 @@ export class AuthService {
       email: user.email ?? '',
       role,
     };
+  }
+
+  private getRegistrationErrorMessage(code: string | undefined): string {
+    switch (code) {
+      case 'signup_disabled':
+        return 'El registro está deshabilitado en Supabase. En Authentication > Settings, habilita la opción para permitir nuevos usuarios.';
+      case 'email_exists':
+      case 'user_already_exists':
+        return 'Ese correo ya tiene una cuenta. Inicia sesión o usa la recuperación de contraseña.';
+      case 'weak_password':
+        return 'La contraseña no cumple los requisitos de Supabase. Usa al menos 12 caracteres y combina letras y números.';
+      case 'over_email_send_rate_limit':
+        return 'Supabase limitó temporalmente el envío de correos de confirmación. Espera unos minutos antes de intentarlo de nuevo.';
+      case 'email_address_invalid':
+        return 'Supabase rechazó el formato o dominio del correo. Revisa la dirección e inténtalo de nuevo.';
+      default:
+        return `Supabase no pudo registrar la cuenta (código: ${code ?? 'desconocido'}). Verifica la configuración de Authentication y el proyecto Supabase conectado en Render.`;
+    }
   }
 }

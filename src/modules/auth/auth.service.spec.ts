@@ -2,6 +2,44 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { AuthService } from './auth.service';
 
 describe('AuthService', () => {
+  it('explains when Supabase has disabled new account registrations', async () => {
+    const signUp = jest.fn().mockResolvedValue({
+      data: { user: null, session: null },
+      error: {
+        code: 'signup_disabled',
+        message: 'Signups not allowed for this instance',
+      },
+    });
+    const supabase = { auth: { signUp } } as unknown as SupabaseClient;
+    const service = new AuthService(supabase);
+
+    await expect(
+      service.register({
+        email: 'cliente@example.com',
+        password: 'ClienteSeguro123!',
+      }),
+    ).rejects.toThrow(/registro está deshabilitado en Supabase/i);
+  });
+
+  it('explains when Supabase is rate-limiting confirmation emails', async () => {
+    const signUp = jest.fn().mockResolvedValue({
+      data: { user: null, session: null },
+      error: {
+        code: 'over_email_send_rate_limit',
+        message: 'Email rate limit exceeded',
+      },
+    });
+    const supabase = { auth: { signUp } } as unknown as SupabaseClient;
+    const service = new AuthService(supabase);
+
+    await expect(
+      service.register({
+        email: 'cliente@example.com',
+        password: 'ClienteSeguro123!',
+      }),
+    ).rejects.toThrow(/limitó temporalmente el envío de correos/i);
+  });
+
   it('explains when login fails because the email is not confirmed', async () => {
     const signInWithPassword = jest.fn().mockResolvedValue({
       data: { user: null, session: null },

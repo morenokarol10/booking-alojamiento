@@ -157,14 +157,22 @@ prueba en producción**; usa una contraseña única y cámbiala antes de publica
 
 #### Registro e inicio de sesión de clientes
 
-El registro usa Supabase Auth (`auth.users`), no una tabla pública propia. Si
-Supabase devuelve una cuenta sin sesión, el registro fue aceptado pero requiere
-confirmar el enlace enviado al correo antes de iniciar sesión. Si no llegan los
-correos, revisa spam y la configuración de Auth > Email en Supabase. Desactivar
-la confirmación de correo permite iniciar sesión inmediatamente, pero debe ser
-una decisión explícita del administrador del proyecto. Si Supabase indica que
-el correo ya existe, prueba iniciar sesión con esa cuenta. Los formularios
-limpian correo y contraseña al terminar cada intento.
+El registro usa Supabase Auth (`auth.users`), no una tabla pública propia. El
+backend asigna `user_metadata.role = cliente`; el rol administrativo sigue
+dependiendo de `app_metadata` y nunca puede asignarse desde el formulario.
+
+Por defecto, Supabase controla la confirmación del correo. Para una demo o
+evaluación temporal, define `SUPABASE_AUTH_AUTO_CONFIRM_SIGNUPS=true` en el
+entorno del backend (en Render: **Dashboard → servicio → Environment**) y
+despliega/reinicia el servicio. Con esa opción, el backend usa la clave
+`SUPABASE_SERVICE_ROLE_KEY` solo en el servidor para confirmar la cuenta y luego
+iniciar sesión automáticamente. Nunca expongas esa clave en el navegador. En
+producción, deja la opción en `false` y usa confirmación por correo.
+
+Si Supabase indica que el correo ya existe, inicia sesión o usa recuperación de
+contraseña; no se crea una segunda cuenta. Los errores de registro se devuelven
+al formulario con el mensaje específico de Supabase. Los formularios limpian
+correo y contraseña al terminar cada intento.
 
 #### Carga de alojamientos de prueba
 

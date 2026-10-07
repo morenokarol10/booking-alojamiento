@@ -48,7 +48,10 @@ async function submitAuth(form, path, successText) {
       throw new Error(
         Array.isArray(message)
           ? message.join(' ')
-          : message || 'No se pudo completar la solicitud.',
+          : typeof message === 'string'
+            ? message
+            : result?.error ||
+              `No se pudo ${path === 'register' ? 'crear la cuenta' : 'iniciar sesión'} (HTTP ${response.status}).`,
       );
     }
 

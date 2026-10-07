@@ -6,8 +6,12 @@ import {
   Logger,
   UnauthorizedException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import type { SupabaseClient, User } from '@supabase/supabase-js';
-import { SUPABASE_AUTH_CLIENT } from '../../supabase/supabase.module';
+import {
+  SUPABASE_AUTH_CLIENT,
+  SUPABASE_CLIENT,
+} from '../../supabase/supabase.module';
 import type { AuthenticatedUser, UserRole } from './auth.types';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
@@ -19,22 +23,27 @@ export class AuthService {
   constructor(
     @Inject(SUPABASE_AUTH_CLIENT)
     private readonly supabase: SupabaseClient,
+    @Inject(SUPABASE_CLIENT)
+    private readonly adminSupabase: SupabaseClient,
+    private readonly configService: ConfigService,
   ) {}
 
   async register(dto: RegisterDto) {
+    if (
+      this.configService
+        .get<string>('SUPABASE_AUTH_AUTO_CONFIRM_SIGNUPS')
+        ?.toLowerCase() === 'true'
+    ) {
+      return this.registerAutoConfirmed(dto);
+    }
+
     const { data, error } = await this.supabase.auth.signUp({
       email: dto.email,
       password: dto.password,
+      options: { data: { role: 'cliente' } },
     });
     if (error) {
-      this.logger.warn(
-        `Supabase Auth rechazó el registro (código: ${error.code ?? 'desconocido'}).`,
-      );
-      throw new BadRequestException({
-        statusCode: 400,
-        message: this.getRegistrationErrorMessage(error.code),
-        error: error.code ?? 'supabase_auth_error',
-      });
+      this.throwRegistrationError(error.code);
     }
     if (!data.user) {
       throw new InternalServerErrorException(
@@ -121,5 +130,63 @@ export class AuthService {
       default:
         return `Supabase no pudo registrar la cuenta (código: ${code ?? 'desconocido'}). Verifica la configuración de Authentication y el proyecto Supabase conectado en Render.`;
     }
+  }
+
+  private async registerAutoConfirmed(dto: RegisterDto) {
+    const { data, error } = await this.adminSupabase.auth.admin.createUser({
+      email: dto.email,
+      password: dto.password,
+      email_confirm: true,
+      user_metadata: { role: 'cliente' },
+    });
+    if (error) {
+      this.throwRegistrationError(error.code);
+    }
+    if (!data.user) {
+      throw new InternalServerErrorException(
+        'Supabase no devolvió el usuario creado.',
+      );
+    }
+
+    const user = this.mapUser(data.user);
+    const { data: sessionData, error: loginError } =
+      await this.supabase.auth.signInWithPassword({
+        email: dto.email,
+        password: dto.password,
+      });
+    if (loginError || !sessionData.user || !sessionData.session) {
+      this.logger.warn(
+        `Se creó la cuenta de cliente, pero no se pudo iniciar sesión automáticamente (código: ${loginError?.code ?? 'desconocido'}).`,
+      );
+      return {
+        data: { user, session: null },
+        message:
+          'La cuenta se creó y confirmó correctamente. Inicia sesión con el correo y la contraseña registrados.',
+      };
+    }
+
+    return {
+      data: {
+        user: this.mapUser(sessionData.user),
+        session: {
+          accessToken: sessionData.session.access_token,
+          refreshToken: sessionData.session.refresh_token,
+          expiresAt: sessionData.session.expires_at,
+          tokenType: sessionData.session.token_type,
+        },
+      },
+      message: 'Cuenta de cliente creada correctamente.',
+    };
+  }
+
+  private throwRegistrationError(code: string | undefined): never {
+    this.logger.warn(
+      `Supabase Auth rechazó el registro (código: ${code ?? 'desconocido'}).`,
+    );
+    throw new BadRequestException({
+      statusCode: 400,
+      message: this.getRegistrationErrorMessage(code),
+      error: code ?? 'supabase_auth_error',
+    });
   }
 }

@@ -269,12 +269,19 @@ una base que ya tenía la estructura anterior se proporcionan
 y
 [20261008_auth_and_rls.sql](./database/migrations/20261008_auth_and_rls.sql)
 y
-[20261009_rename_alojamientos_imagenes.sql](./database/migrations/20261009_rename_alojamientos_imagenes.sql).
+[20261009_rename_alojamientos_imagenes.sql](./database/migrations/20261009_rename_alojamientos_imagenes.sql)
+y
+[20261010_render_schema_cache.sql](./database/migrations/20261010_render_schema_cache.sql).
 Los scripts deben ejecutarse en Supabase con una cuenta autorizada.
-En una base ya desplegada, aplica la migración
-`20261009_rename_alojamientos_imagenes.sql` para renombrar `imagenes` a
-`urls_imagenes` y recargar el schema cache de PostgREST; el cambio del código por
-sí solo no modifica la base remota.
+En Render, el despliegue del backend no ejecuta migraciones de Supabase. Para
+actualizar una base remota existente, ejecuta la migración
+`20261010_render_schema_cache.sql` en el SQL Editor de Supabase; asegura la
+columna `servicios`, adapta imágenes/coordenadas al esquema actual y recarga el
+schema cache de PostgREST. Luego carga los alojamientos de demostración con
+`npm run seed:alojamientos` desde un entorno que tenga
+`SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY`. El Marketplace mostrará esos
+registros al consultar `GET /api/v1/alojamientos`. No se siembran datos
+automáticamente en cada arranque de Render.
 
 ```mermaid
 erDiagram
@@ -458,8 +465,9 @@ No agregues `.env` al repositorio. `SUPABASE_KEY` es para los flujos de Auth;
    en el SQL Editor de Supabase.
 2. Para una base previa, ejecuta primero
    `database/migrations/20261007_contract_alignment.sql`,
-   `database/migrations/20261008_auth_and_rls.sql` y
-   `database/migrations/20261009_rename_alojamientos_imagenes.sql`, en ese orden.
+   `database/migrations/20261008_auth_and_rls.sql`,
+   `database/migrations/20261009_rename_alojamientos_imagenes.sql` y
+   `database/migrations/20261010_render_schema_cache.sql`, en ese orden.
 3. Instala y compila:
 
    ```powershell

@@ -39,6 +39,31 @@ describe('AccommodationsService.create', () => {
     );
   });
 
+  it('explains how to fix Supabase schema-cache column errors', async () => {
+    const databaseError = {
+      code: 'PGRST204',
+      message: "Could not find the 'servicios' column in the schema cache",
+    };
+    jest.spyOn(console, 'error').mockImplementation();
+    const supabase = {
+      from: jest.fn(() => ({
+        insert: jest.fn(() => ({
+          select: jest.fn(() => ({
+            single: jest.fn().mockResolvedValue({
+              data: null,
+              error: databaseError,
+            }),
+          })),
+        })),
+      })),
+    } as unknown as SupabaseClient;
+    const service = new AccommodationsService(supabase);
+
+    await expect(service.create({} as CreateAlojamientoDto)).rejects.toThrow(
+      'El esquema de Supabase está desactualizado. Ejecuta database/migrations/20261010_render_schema_cache.sql y vuelve a desplegar.',
+    );
+  });
+
   it('inserts only database columns and flattens coordinates', async () => {
     let inserted: Record<string, unknown> | undefined;
     const row = {

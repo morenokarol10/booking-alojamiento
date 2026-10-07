@@ -106,6 +106,8 @@ describe('alojamiento mapper', () => {
   it.each([
     ['native text array', ['WiFi', 'Desayuno incluido']],
     ['JSON-encoded text array', '["WiFi","Desayuno incluido"]'],
+    ['comma-separated legacy text', 'WiFi, Desayuno incluido'],
+    ['null legacy value', null],
   ])('normalizes services from a %s', (_description, servicios) => {
     const entity = toAlojamientoEntity({
       id: '10000000-0000-4000-8000-000000000001',
@@ -123,15 +125,21 @@ describe('alojamiento mapper', () => {
       habitaciones_disponibles: 2,
       servicios,
       politica_cancelacion: null,
-      urls_imagenes: '["https://example.com/room.jpg"]',
+      urls_imagenes:
+        'https://example.com/room.jpg, https://example.com/other.jpg',
       created_at: '2026-10-07T00:00:00.000Z',
     });
 
-    expect(entity.servicios).toEqual(['WiFi', 'Desayuno incluido']);
-    expect(entity.imagenes).toEqual(['https://example.com/room.jpg']);
+    expect(entity.servicios).toEqual(
+      servicios === null ? [] : ['WiFi', 'Desayuno incluido'],
+    );
+    expect(entity.imagenes).toEqual([
+      'https://example.com/room.jpg',
+      'https://example.com/other.jpg',
+    ]);
   });
 
-  it.each(['not json', '{"servicio":"WiFi"}', '[1,2]'])(
+  it.each(['{"servicio":"WiFi"}', '[1,2]', '[not valid json]'])(
     'rejects malformed JSON array values for services: %s',
     (servicios) => {
       expect(() =>

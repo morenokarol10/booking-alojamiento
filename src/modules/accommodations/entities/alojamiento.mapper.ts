@@ -180,7 +180,7 @@ function toStringArray(value: unknown, field: string): string[] {
   let items: unknown = value;
   if (typeof value === 'string') {
     const trimmedValue = value.trim();
-    if (trimmedValue.startsWith('[')) {
+    if (trimmedValue.startsWith('[') || trimmedValue.startsWith('{')) {
       try {
         items = JSON.parse(trimmedValue);
       } catch {
@@ -205,14 +205,24 @@ function toStringArray(value: unknown, field: string): string[] {
 }
 
 function stringArray(value: unknown, field: string): string[] {
+  if (value === null || value === undefined || value === '') return [];
+
   let parsedValue = value;
   if (typeof value === 'string') {
-    try {
-      parsedValue = JSON.parse(value);
-    } catch {
-      throw new InternalServerErrorException(
-        `Supabase devolvió una lista no válida para ${field}.`,
-      );
+    const trimmedValue = value.trim();
+    if (trimmedValue.startsWith('[') || trimmedValue.startsWith('{')) {
+      try {
+        parsedValue = JSON.parse(trimmedValue);
+      } catch {
+        throw new InternalServerErrorException(
+          `Supabase devolvió una lista no válida para ${field}.`,
+        );
+      }
+    } else {
+      parsedValue = trimmedValue
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean);
     }
   }
 

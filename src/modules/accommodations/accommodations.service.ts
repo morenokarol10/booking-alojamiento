@@ -89,6 +89,14 @@ export class AccommodationsService {
 
       if (result.error) {
         console.error('Supabase create alojamiento error:', result.error);
+        const schemaCacheError =
+          result.error.code === 'PGRST204' ||
+          /schema cache|column .* does not exist/i.test(result.error.message);
+        if (schemaCacheError) {
+          throw new InternalServerErrorException(
+            'El esquema de Supabase está desactualizado. Ejecuta database/migrations/20261010_render_schema_cache.sql y vuelve a desplegar.',
+          );
+        }
         const message = `No se pudo crear el alojamiento: ${result.error.message}`;
         if (
           result.error.code?.startsWith('22') ||

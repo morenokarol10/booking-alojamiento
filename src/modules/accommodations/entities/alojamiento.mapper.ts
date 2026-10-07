@@ -25,13 +25,14 @@ export function toAlojamientoDatabase(
   if (dto.ciudad !== undefined) record.ciudad = dto.ciudad;
   if (dto.direccion !== undefined) record.direccion = dto.direccion;
   if (dto.coordenadas !== undefined) {
-    record.coordenadas = {
-      latitud: toFiniteNumber(dto.coordenadas.latitud, 'coordenadas.latitud'),
-      longitud: toFiniteNumber(
-        dto.coordenadas.longitud,
-        'coordenadas.longitud',
-      ),
-    };
+    record.latitud = toFiniteNumber(
+      dto.coordenadas.latitud,
+      'coordenadas.latitud',
+    );
+    record.longitud = toFiniteNumber(
+      dto.coordenadas.longitud,
+      'coordenadas.longitud',
+    );
   }
   if (dto.precioBaseNoche !== undefined) {
     record.precio_base_noche = toFiniteNumber(
@@ -82,7 +83,9 @@ export function toAlojamientoEntity(
     tipo: row.tipo,
     ciudad: requireString(row.ciudad, 'ciudad'),
     direccion: requireString(row.direccion, 'direccion'),
-    coordenadas: mapCoordinates(row.coordenadas),
+    coordenadas: mapCoordinates(
+      row.coordenadas ?? { latitud: row.latitud, longitud: row.longitud },
+    ),
     precioBaseNoche: requireNumber(row.precio_base_noche, 'precio_base_noche'),
     moneda: requireString(row.moneda, 'moneda'),
     capacidadMaxima: requireNumber(row.capacidad_maxima, 'capacidad_maxima'),

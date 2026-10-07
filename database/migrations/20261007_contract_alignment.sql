@@ -95,7 +95,8 @@ END $$;
 ALTER TABLE public.alojamientos
   ADD COLUMN IF NOT EXISTS proveedor_id UUID,
   ADD COLUMN IF NOT EXISTS direccion TEXT,
-  ADD COLUMN IF NOT EXISTS coordenadas JSONB,
+  ADD COLUMN IF NOT EXISTS latitud DOUBLE PRECISION,
+  ADD COLUMN IF NOT EXISTS longitud DOUBLE PRECISION,
   ADD COLUMN IF NOT EXISTS moneda VARCHAR(3) NOT NULL DEFAULT 'USD',
   ADD COLUMN IF NOT EXISTS habitaciones_disponibles INTEGER NOT NULL DEFAULT 1,
   ADD COLUMN IF NOT EXISTS servicios TEXT[] NOT NULL DEFAULT '{}',
@@ -110,9 +111,27 @@ UPDATE public.alojamientos
 SET direccion = ciudad
 WHERE direccion IS NULL;
 
-UPDATE public.alojamientos
-SET coordenadas = '{"latitud": 0, "longitud": 0}'::JSONB
-WHERE coordenadas IS NULL;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'alojamientos'
+      AND column_name = 'coordenadas'
+  ) THEN
+    EXECUTE $migration$
+      UPDATE public.alojamientos
+      SET latitud = COALESCE((coordenadas->>'latitud')::DOUBLE PRECISION, -0.1807),
+          longitud = COALESCE((coordenadas->>'longitud')::DOUBLE PRECISION, -78.4678)
+      WHERE latitud IS NULL OR longitud IS NULL
+    $migration$;
+    ALTER TABLE public.alojamientos DROP COLUMN coordenadas;
+  END IF;
+
+  UPDATE public.alojamientos
+  SET latitud = COALESCE(latitud, -0.1807),
+      longitud = COALESCE(longitud, -78.4678)
+  WHERE latitud IS NULL OR longitud IS NULL;
+END $$;
 
 DO $$
 BEGIN
@@ -140,7 +159,8 @@ END $$;
 ALTER TABLE public.alojamientos
   ALTER COLUMN proveedor_id SET NOT NULL,
   ALTER COLUMN direccion SET NOT NULL,
-  ALTER COLUMN coordenadas SET NOT NULL;
+  ALTER COLUMN latitud SET NOT NULL,
+  ALTER COLUMN longitud SET NOT NULL;
 
 ALTER TABLE public.reservas
   ADD COLUMN IF NOT EXISTS cliente_telefono TEXT,

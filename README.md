@@ -72,7 +72,8 @@ de disponibilidad externa.
 2. El esquema actual contiene tres tablas de dominio. `proveedor_id` es un UUID
    sin tabla `proveedores` ni clave foránea en el script actual.
 3. `servicios` e `imagenes` son arreglos PostgreSQL `TEXT[]`, no JSONB ni tablas
-   relacionales propias. `coordenadas` y el payload de eventos sí son `JSONB`.
+   relacionales propias. Las coordenadas del alojamiento se almacenan en las
+   columnas numéricas `latitud` y `longitud`; el payload de eventos sí es `JSONB`.
    Esta decisión del prototipo significa que no se debe presentar el esquema
    como normalizado estrictamente en 3FN.
 4. El pago es una simulación local. No hay cobro real ni integración con
@@ -277,7 +278,8 @@ erDiagram
         text tipo
         text ciudad
         text direccion
-        jsonb coordenadas
+        double latitud
+        double longitud
         numeric precio_base_noche
         varchar moneda
         integer capacidad_maxima
@@ -320,8 +322,9 @@ Entidades de la aplicación:
 
 **Nota de normalización:** no hay tabla `proveedores` en este esquema y
 `proveedor_id` no declara FK. `servicios` e `imagenes` son columnas PostgreSQL
-`TEXT[]`; los documentos JSONB son `coordenadas` y `eventos_log.payload`. Por
-lo tanto, el esquema no demuestra normalización estricta en 3FN. Para afirmar
+`TEXT[]`; `alojamientos.latitud` y `alojamientos.longitud` son columnas numéricas
+y `eventos_log.payload` es JSONB. Por lo tanto, el esquema no demuestra
+normalización estricta en 3FN. Para afirmar
 3FN, una iteración deberá crear entidades/tablas de proveedores, servicios e
 imágenes con relaciones y migrar los datos, manteniendo aparte el snapshot
 transaccional que se requiera en una reserva.

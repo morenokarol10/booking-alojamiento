@@ -5,7 +5,7 @@ import {
 import { CreateAlojamientoDto } from '../dto/create-alojamiento.dto';
 
 describe('alojamiento mapper', () => {
-  it('maps request camelCase fields to Supabase snake_case columns', () => {
+  it('maps request fields only to real alojamientos columns', () => {
     const dto = {
       proveedorId: '20000000-0000-4000-8000-000000000001',
       nombre: 'Suite Quito',
@@ -28,7 +28,8 @@ describe('alojamiento mapper', () => {
       tipo: dto.tipo,
       ciudad: dto.ciudad,
       direccion: dto.direccion,
-      coordenadas: dto.coordenadas,
+      latitud: dto.coordenadas.latitud,
+      longitud: dto.coordenadas.longitud,
       precio_base_noche: dto.precioBaseNoche,
       moneda: dto.moneda,
       capacidad_maxima: dto.capacidadMaxima,
@@ -37,6 +38,7 @@ describe('alojamiento mapper', () => {
       politica_cancelacion: dto.politicaCancelacion,
       imagenes: dto.imagenes,
     });
+    expect(toAlojamientoDatabase(dto)).not.toHaveProperty('coordenadas');
   });
 
   it('normalizes comma-separated lists and numeric values for Supabase', () => {
@@ -55,7 +57,8 @@ describe('alojamiento mapper', () => {
     } as unknown as CreateAlojamientoDto;
 
     expect(toAlojamientoDatabase(dto)).toMatchObject({
-      coordenadas: { latitud: -0.22, longitud: -78.51 },
+      latitud: -0.22,
+      longitud: -78.51,
       precio_base_noche: 85.5,
       capacidad_maxima: 4,
       habitaciones_disponibles: 2,
@@ -73,7 +76,8 @@ describe('alojamiento mapper', () => {
       tipo: 'hotel',
       ciudad: 'Quito',
       direccion: 'Centro Histórico',
-      coordenadas: { latitud: -0.22, longitud: -78.51 },
+      latitud: -0.22,
+      longitud: -78.51,
       precio_base_noche: '85.00',
       moneda: 'USD',
       capacidad_maxima: 4,
@@ -108,7 +112,8 @@ describe('alojamiento mapper', () => {
       tipo: 'hotel',
       ciudad: 'Quito',
       direccion: 'Centro Histórico',
-      coordenadas: { latitud: -0.22, longitud: -78.51 },
+      latitud: -0.22,
+      longitud: -78.51,
       precio_base_noche: '85.00',
       moneda: 'USD',
       capacidad_maxima: 4,

@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS public.alojamientos (
     CHECK (habitaciones_disponibles >= 0),
   servicios TEXT[] NOT NULL DEFAULT '{}',
   politica_cancelacion TEXT,
-  imagenes TEXT[] NOT NULL DEFAULT '{}',
+  urls_imagenes TEXT[] NOT NULL DEFAULT '{}',
   created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -103,7 +103,7 @@ INSERT INTO public.alojamientos (
   habitaciones_disponibles,
   servicios,
   politica_cancelacion,
-  imagenes
+  urls_imagenes
 )
 VALUES
   (

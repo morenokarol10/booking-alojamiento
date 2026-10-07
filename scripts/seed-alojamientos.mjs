@@ -28,7 +28,7 @@ const accommodations = [
     habitaciones_disponibles: 2,
     servicios: ['WiFi', 'Desayuno incluido', 'Recepción 24 horas'],
     politica_cancelacion: 'Cancelación gratuita hasta 48 horas antes.',
-    imagenes: [
+    urls_imagenes: [
       'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=1200&q=85',
     ],
   },
@@ -49,7 +49,7 @@ const accommodations = [
     habitaciones_disponibles: 2,
     servicios: ['WiFi', 'Cocina equipada', 'Lavandería'],
     politica_cancelacion: 'Cancelación gratuita hasta 48 horas antes.',
-    imagenes: [
+    urls_imagenes: [
       'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?auto=format&fit=crop&w=1200&q=85',
     ],
   },
@@ -70,7 +70,7 @@ const accommodations = [
     habitaciones_disponibles: 2,
     servicios: ['WiFi', 'Piscina', 'Gimnasio', 'Parqueadero'],
     politica_cancelacion: 'Cancelación gratuita hasta 72 horas antes.',
-    imagenes: [
+    urls_imagenes: [
       'https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=1200&q=85',
     ],
   },
@@ -91,7 +91,7 @@ const accommodations = [
     habitaciones_disponibles: 2,
     servicios: ['WiFi', 'Terraza', 'Vista a la montaña', 'Parqueadero'],
     politica_cancelacion: 'Cancelación gratuita hasta 72 horas antes.',
-    imagenes: [
+    urls_imagenes: [
       'https://images.unsplash.com/photo-1518780664697-55e3ad937233?auto=format&fit=crop&w=1200&q=85',
     ],
   },
@@ -112,7 +112,7 @@ const accommodations = [
     habitaciones_disponibles: 3,
     servicios: ['WiFi', 'Desayuno incluido', 'Jardín', 'Tours de naturaleza'],
     politica_cancelacion: 'Cancelación gratuita hasta 5 días antes.',
-    imagenes: [
+    urls_imagenes: [
       'https://images.unsplash.com/photo-1449158743715-0a90ebb6d2d8?auto=format&fit=crop&w=1200&q=85',
     ],
   },
@@ -133,7 +133,7 @@ const accommodations = [
     habitaciones_disponibles: 2,
     servicios: ['WiFi', 'Cocina equipada', 'Hamacas', 'Ducha exterior'],
     politica_cancelacion: 'Cancelación gratuita hasta 48 horas antes.',
-    imagenes: [
+    urls_imagenes: [
       'https://images.unsplash.com/photo-1499793983690-e29da59ef1c2?auto=format&fit=crop&w=1200&q=85',
     ],
   },
@@ -159,7 +159,7 @@ const accommodations = [
       'Excursiones',
     ],
     politica_cancelacion: 'Cancelación gratuita hasta 7 días antes.',
-    imagenes: [
+    urls_imagenes: [
       'https://images.unsplash.com/photo-1530789253388-582c481c54b0?auto=format&fit=crop&w=1200&q=85',
     ],
   },
@@ -180,7 +180,7 @@ const accommodations = [
     habitaciones_disponibles: 3,
     servicios: ['WiFi', 'Cocina equipada', 'Espacio de trabajo'],
     politica_cancelacion: 'Cancelación gratuita hasta 24 horas antes.',
-    imagenes: [
+    urls_imagenes: [
       'https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=1200&q=85',
     ],
   },
@@ -201,7 +201,7 @@ const accommodations = [
     habitaciones_disponibles: 4,
     servicios: ['WiFi', 'Desayuno incluido', 'Balcón', 'Agua caliente'],
     politica_cancelacion: 'Cancelación gratuita hasta 48 horas antes.',
-    imagenes: [
+    urls_imagenes: [
       'https://images.unsplash.com/photo-1445019980597-93fa8acb246c?auto=format&fit=crop&w=1200&q=85',
     ],
   },
@@ -228,7 +228,7 @@ const accommodations = [
       'Lavandería',
     ],
     politica_cancelacion: 'Cancelación gratuita hasta 5 días antes.',
-    imagenes: [
+    urls_imagenes: [
       'https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&w=1200&q=85',
     ],
   },

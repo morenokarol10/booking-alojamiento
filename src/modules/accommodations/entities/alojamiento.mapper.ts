@@ -57,7 +57,7 @@ export function toAlojamientoDatabase(
     record.politica_cancelacion = dto.politicaCancelacion;
   }
   if (dto.imagenes !== undefined) {
-    record.imagenes = toStringArray(dto.imagenes, 'imagenes');
+    record.urls_imagenes = toStringArray(dto.imagenes, 'imagenes');
   }
   return record;
 }
@@ -95,7 +95,7 @@ export function toAlojamientoEntity(
     ),
     servicios: stringArray(row.servicios, 'servicios'),
     politicaCancelacion: nullableString(row.politica_cancelacion),
-    imagenes: stringArray(row.imagenes, 'imagenes'),
+    imagenes: stringArray(row.urls_imagenes, 'urls_imagenes'),
     createdAt: requireString(row.created_at, 'created_at'),
   };
 }

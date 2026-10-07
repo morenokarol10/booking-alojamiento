@@ -100,8 +100,35 @@ ALTER TABLE public.alojamientos
   ADD COLUMN IF NOT EXISTS moneda VARCHAR(3) NOT NULL DEFAULT 'USD',
   ADD COLUMN IF NOT EXISTS habitaciones_disponibles INTEGER NOT NULL DEFAULT 1,
   ADD COLUMN IF NOT EXISTS servicios TEXT[] NOT NULL DEFAULT '{}',
-  ADD COLUMN IF NOT EXISTS politica_cancelacion TEXT,
-  ADD COLUMN IF NOT EXISTS imagenes TEXT[] NOT NULL DEFAULT '{}';
+  ADD COLUMN IF NOT EXISTS politica_cancelacion TEXT;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'alojamientos'
+      AND column_name = 'urls_imagenes'
+  ) THEN
+    IF EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'alojamientos'
+        AND column_name = 'imagenes'
+    ) THEN
+      ALTER TABLE public.alojamientos RENAME COLUMN imagenes TO urls_imagenes;
+    ELSE
+      ALTER TABLE public.alojamientos
+        ADD COLUMN urls_imagenes TEXT[] NOT NULL DEFAULT '{}';
+    END IF;
+  ELSIF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'alojamientos'
+      AND column_name = 'imagenes'
+  ) THEN
+    EXECUTE
+      'UPDATE public.alojamientos SET urls_imagenes = imagenes WHERE cardinality(urls_imagenes) = 0 AND cardinality(imagenes) > 0';
+    ALTER TABLE public.alojamientos DROP COLUMN imagenes;
+  END IF;
+END $$;
 
 UPDATE public.alojamientos
 SET proveedor_id = gen_random_uuid()
@@ -141,7 +168,7 @@ BEGIN
       AND column_name = 'imagen_url'
   ) THEN
     EXECUTE
-      'UPDATE public.alojamientos SET imagenes = ARRAY[imagen_url] WHERE imagen_url IS NOT NULL AND cardinality(imagenes) = 0';
+      'UPDATE public.alojamientos SET urls_imagenes = ARRAY[imagen_url] WHERE imagen_url IS NOT NULL AND cardinality(urls_imagenes) = 0';
     ALTER TABLE public.alojamientos DROP COLUMN imagen_url;
   END IF;
 

@@ -57,7 +57,7 @@ describe('AccommodationsService.create', () => {
       habitaciones_disponibles: 2,
       servicios: ['WiFi'],
       politica_cancelacion: 'Flexible',
-      imagenes: ['https://example.com/suite.jpg'],
+      urls_imagenes: ['https://example.com/suite.jpg'],
       created_at: '2026-10-07T00:00:00.000Z',
     };
     const supabase = {
@@ -106,7 +106,7 @@ describe('AccommodationsService.create', () => {
       habitaciones_disponibles: 2,
       servicios: ['WiFi'],
       politica_cancelacion: 'Flexible',
-      imagenes: ['https://example.com/suite.jpg'],
+      urls_imagenes: ['https://example.com/suite.jpg'],
     });
     expect(inserted).not.toHaveProperty('coordenadas');
     expect(Object.keys(inserted ?? {})).toHaveLength(15);

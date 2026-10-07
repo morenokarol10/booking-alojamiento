@@ -71,9 +71,11 @@ de disponibilidad externa.
    Por tanto, **no se declara conformidad estricta** entre ambos contratos.
 2. El esquema actual contiene tres tablas de dominio. `proveedor_id` es un UUID
    sin tabla `proveedores` ni clave foránea en el script actual.
-3. `servicios` e `imagenes` son arreglos PostgreSQL `TEXT[]`, no JSONB ni tablas
-   relacionales propias. Las coordenadas del alojamiento se almacenan en las
-   columnas numéricas `latitud` y `longitud`; el payload de eventos sí es `JSONB`.
+3. `servicios` y `urls_imagenes` son arreglos PostgreSQL `TEXT[]`, no JSONB ni
+   tablas relacionales propias. La API conserva `imagenes` en camelCase y el
+   mapper lo traduce a `urls_imagenes`. Las coordenadas del alojamiento se
+   almacenan en las columnas numéricas `latitud` y `longitud`; el payload de
+   eventos sí es `JSONB`.
    Esta decisión del prototipo significa que no se debe presentar el esquema
    como normalizado estrictamente en 3FN.
 4. El pago es una simulación local. No hay cobro real ni integración con
@@ -188,10 +190,11 @@ mezclan con las de clientes en el panel administrativo, pero no aparecen en
 
 #### Normalización de listas de Supabase
 
-`servicios` e `imagenes` se almacenan como `TEXT[]`. El mapper de alojamientos
-responde siempre arreglos de strings: además de los arreglos nativos, acepta
-valores serializados como JSON (`["WiFi"]`) y responde con error explícito si
-el dato no se puede validar.
+`servicios` y `urls_imagenes` se almacenan como `TEXT[]`; el campo API
+`imagenes` se mapea explícitamente a `urls_imagenes`. El mapper responde siempre
+arreglos de strings: además de los arreglos nativos, acepta valores serializados
+como JSON (`["WiFi"]`) y responde con error explícito si el dato no se puede
+validar.
 
 ### 3.3 Marketplace Web
 
@@ -264,8 +267,14 @@ El esquema nuevo está en [database/schema.sql](./database/schema.sql). Para
 una base que ya tenía la estructura anterior se proporcionan
 [20261007_contract_alignment.sql](./database/migrations/20261007_contract_alignment.sql)
 y
-[20261008_auth_and_rls.sql](./database/migrations/20261008_auth_and_rls.sql).
+[20261008_auth_and_rls.sql](./database/migrations/20261008_auth_and_rls.sql)
+y
+[20261009_rename_alojamientos_imagenes.sql](./database/migrations/20261009_rename_alojamientos_imagenes.sql).
 Los scripts deben ejecutarse en Supabase con una cuenta autorizada.
+En una base ya desplegada, aplica la migración
+`20261009_rename_alojamientos_imagenes.sql` para renombrar `imagenes` a
+`urls_imagenes` y recargar el schema cache de PostgREST; el cambio del código por
+sí solo no modifica la base remota.
 
 ```mermaid
 erDiagram
@@ -285,7 +294,7 @@ erDiagram
         integer capacidad_maxima
         integer habitaciones_disponibles
         text_array servicios
-        text_array imagenes
+        text_array urls_imagenes
         text politica_cancelacion
     }
     RESERVAS {
@@ -321,9 +330,9 @@ Entidades de la aplicación:
   reserva para admitir eventos de integración de distintos dominios.
 
 **Nota de normalización:** no hay tabla `proveedores` en este esquema y
-`proveedor_id` no declara FK. `servicios` e `imagenes` son columnas PostgreSQL
-`TEXT[]`; `alojamientos.latitud` y `alojamientos.longitud` son columnas numéricas
-y `eventos_log.payload` es JSONB. Por lo tanto, el esquema no demuestra
+`proveedor_id` no declara FK. `servicios` y `urls_imagenes` son columnas
+PostgreSQL `TEXT[]`; `alojamientos.latitud` y `alojamientos.longitud` son
+columnas numéricas y `eventos_log.payload` es JSONB. Por lo tanto, el esquema no demuestra
 normalización estricta en 3FN. Para afirmar
 3FN, una iteración deberá crear entidades/tablas de proveedores, servicios e
 imágenes con relaciones y migrar los datos, manteniendo aparte el snapshot
@@ -448,8 +457,9 @@ No agregues `.env` al repositorio. `SUPABASE_KEY` es para los flujos de Auth;
 1. Para proyecto nuevo, ejecuta [database/schema.sql](./database/schema.sql)
    en el SQL Editor de Supabase.
 2. Para una base previa, ejecuta primero
-   `database/migrations/20261007_contract_alignment.sql` y después
-   `database/migrations/20261008_auth_and_rls.sql`.
+   `database/migrations/20261007_contract_alignment.sql`,
+   `database/migrations/20261008_auth_and_rls.sql` y
+   `database/migrations/20261009_rename_alojamientos_imagenes.sql`, en ese orden.
 3. Instala y compila:
 
    ```powershell

@@ -36,7 +36,7 @@ describe('alojamiento mapper', () => {
       habitaciones_disponibles: dto.habitacionesDisponibles,
       servicios: dto.servicios,
       politica_cancelacion: dto.politicaCancelacion,
-      imagenes: dto.imagenes,
+      urls_imagenes: dto.imagenes,
     });
     expect(toAlojamientoDatabase(dto)).not.toHaveProperty('coordenadas');
   });
@@ -63,7 +63,10 @@ describe('alojamiento mapper', () => {
       capacidad_maxima: 4,
       habitaciones_disponibles: 2,
       servicios: ['WiFi', 'Desayuno incluido'],
-      imagenes: ['https://example.com/one.jpg', 'https://example.com/two.jpg'],
+      urls_imagenes: [
+        'https://example.com/one.jpg',
+        'https://example.com/two.jpg',
+      ],
     });
   });
 
@@ -84,7 +87,7 @@ describe('alojamiento mapper', () => {
       habitaciones_disponibles: 2,
       servicios: ['wifi'],
       politica_cancelacion: null,
-      imagenes: ['https://example.com/room.jpg'],
+      urls_imagenes: ['https://example.com/room.jpg'],
       created_at: '2026-10-07T00:00:00.000Z',
     });
 
@@ -120,7 +123,7 @@ describe('alojamiento mapper', () => {
       habitaciones_disponibles: 2,
       servicios,
       politica_cancelacion: null,
-      imagenes: '["https://example.com/room.jpg"]',
+      urls_imagenes: '["https://example.com/room.jpg"]',
       created_at: '2026-10-07T00:00:00.000Z',
     });
 
@@ -147,7 +150,7 @@ describe('alojamiento mapper', () => {
           habitaciones_disponibles: 2,
           servicios,
           politica_cancelacion: null,
-          imagenes: [],
+          urls_imagenes: [],
           created_at: '2026-10-07T00:00:00.000Z',
         }),
       ).toThrow('Supabase devolvió una lista no válida para servicios.');
@@ -180,7 +183,7 @@ describe('alojamiento mapper', () => {
         habitaciones_disponibles: 2,
         servicios: ['wifi'],
         politica_cancelacion: null,
-        imagenes: ['https://example.com/room.jpg'],
+        urls_imagenes: ['https://example.com/room.jpg'],
         created_at: '2026-10-07T00:00:00.000Z',
       });
 

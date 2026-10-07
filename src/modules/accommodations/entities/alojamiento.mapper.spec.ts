@@ -104,6 +104,37 @@ describe('alojamiento mapper', () => {
   });
 
   it.each([
+    ['cabana', 'villa'],
+    ['Cabaña', 'villa'],
+    ['apartamento', 'departamento'],
+    [' Apartamento ', 'departamento'],
+  ])('normalizes legacy accommodation type %s to %s', (tipo, expected) => {
+    const entity = toAlojamientoEntity({
+      id: '10000000-0000-4000-8000-000000000001',
+      proveedor_id: '20000000-0000-4000-8000-000000000001',
+      nombre: 'Alojamiento heredado',
+      descripcion: null,
+      tipo,
+      ciudad: 'Quito',
+      direccion: 'Centro',
+      latitud: -0.22,
+      longitud: -78.51,
+      precio_base_noche: 85,
+      moneda: 'USD',
+      capacidad_maxima: 4,
+      habitaciones_disponibles: 2,
+      servicios: null,
+      politica_cancelacion: null,
+      urls_imagenes: null,
+      created_at: '2026-10-07T00:00:00.000Z',
+    });
+
+    expect(entity.tipo).toBe(expected);
+    expect(entity.servicios).toEqual([]);
+    expect(entity.imagenes).toEqual([]);
+  });
+
+  it.each([
     ['native text array', ['WiFi', 'Desayuno incluido']],
     ['JSON-encoded text array', '["WiFi","Desayuno incluido"]'],
     ['comma-separated legacy text', 'WiFi, Desayuno incluido'],

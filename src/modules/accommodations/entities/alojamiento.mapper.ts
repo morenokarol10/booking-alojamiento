@@ -65,22 +65,14 @@ export function toAlojamientoDatabase(
 export function toAlojamientoEntity(
   row: Record<string, unknown>,
 ): AlojamientoEntity {
-  if (
-    row.tipo !== 'hotel' &&
-    row.tipo !== 'departamento' &&
-    row.tipo !== 'villa'
-  ) {
-    throw new InternalServerErrorException(
-      'Supabase devolvió un tipo de alojamiento no reconocido.',
-    );
-  }
+  const tipo = mapAccommodationType(row.tipo);
 
   return {
     id: requireString(row.id, 'id'),
     proveedorId: requireString(row.proveedor_id, 'proveedor_id'),
     nombre: requireString(row.nombre, 'nombre'),
     descripcion: nullableString(row.descripcion),
-    tipo: row.tipo,
+    tipo,
     ciudad: requireString(row.ciudad, 'ciudad'),
     direccion: requireString(row.direccion, 'direccion'),
     coordenadas: mapCoordinates(
@@ -98,6 +90,35 @@ export function toAlojamientoEntity(
     imagenes: stringArray(row.urls_imagenes, 'urls_imagenes'),
     createdAt: requireString(row.created_at, 'created_at'),
   };
+}
+
+function mapAccommodationType(value: unknown): AlojamientoEntity['tipo'] {
+  if (typeof value !== 'string') {
+    throw new InternalServerErrorException(
+      'Supabase devolvió un tipo de alojamiento no reconocido.',
+    );
+  }
+
+  const normalizedType = value
+    .trim()
+    .toLocaleLowerCase('es')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+
+  switch (normalizedType) {
+    case 'hotel':
+    case 'departamento':
+    case 'villa':
+      return normalizedType;
+    case 'apartamento':
+      return 'departamento';
+    case 'cabana':
+      return 'villa';
+    default:
+      throw new InternalServerErrorException(
+        `Supabase devolvió un tipo de alojamiento no reconocido: ${value}.`,
+      );
+  }
 }
 
 function mapCoordinates(value: unknown): CoordenadasEntity {

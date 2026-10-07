@@ -1,371 +1,473 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Booking Prototipo - Integración de Sistemas
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+Prototipo de una plataforma de alojamientos tipo Booking, desarrollado como
+proyecto integrador. Incluye un Marketplace público, un Panel de Administración,
+una API REST en NestJS, persistencia PostgreSQL en Supabase, autenticación con
+Supabase Auth y un registro de eventos de dominio para preparar la integración
+EDA.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+> **Estado de la evidencia de nube:** la configuración de Render y los enlaces
+> públicos objetivo se incluyen en este repositorio. Sin embargo, al revisar
+> `https://booking-alojamiento.onrender.com/marketplace/` y
+> `https://booking-alojamiento.onrender.com/api/docs-json` el **7 de octubre de
+> 2026**, ambos respondieron HTTP **503 Service Unavailable**. Por ello, este
+> documento no afirma que el servicio esté 100 % activo ni que la base de datos
+> de producción esté operativa en este momento. Se debe verificar el estado del
+> servicio y volver a probar las URLs antes de entregar una afirmación de
+> disponibilidad.
 
-## Booking Alojamiento
+## 1. Resumen Ejecutivo y Estado del Despliegue
 
-Prototipo de plataforma de reservas con API en NestJS, persistencia en Supabase
-y dos interfaces web responsivas: Marketplace público y Panel de Administración.
+| Elemento                          | Implementación / estado                                                  |
+| :-------------------------------- | :----------------------------------------------------------------------- |
+| Aplicación                        | API NestJS y sitio estático HTML/CSS/JavaScript                          |
+| Plataforma prevista               | Render Web Service, ejecutado con Docker                                 |
+| Persistencia prevista             | Supabase PostgreSQL                                                      |
+| Autenticación                     | Supabase Auth, JWT Bearer y roles `cliente` / `admin`                    |
+| Marketplace                       | [`/marketplace/`](https://booking-alojamiento.onrender.com/marketplace/) |
+| Panel Admin                       | [`/admin/`](https://booking-alojamiento.onrender.com/admin/)             |
+| Swagger generado                  | [`/api/docs`](https://booking-alojamiento.onrender.com/api/docs)         |
+| Resultado de verificación externa | HTTP 503 en Marketplace y Swagger JSON al 2026-10-07                     |
 
-### Arquitectura inicial
+El repositorio contiene un [Dockerfile](./Dockerfile), un blueprint de Render
+en [render.yaml](./render.yaml), configuración de variables de entorno y
+scripts SQL para preparar Supabase. Esa configuración demuestra preparación
+para despliegue, pero no prueba por sí sola que el servicio se encuentre
+actualmente saludable, que esté conectado a una instancia de Supabase o que
+los datos en producción estén disponibles.
 
-```mermaid
-flowchart LR
-    Guest[Huésped] -->|Navega y reserva| Marketplace[Marketplace<br/>HTML, CSS, JS]
-    Admin[Administrador] -->|Gestiona y monitorea| Panel[Panel Admin<br/>HTML, CSS, JS]
-    Marketplace -->|JWT Bearer · Fetch REST /api/v1| API[NestJS<br/>Auth · Alojamientos · Reservas · Admin]
-    Panel -->|Fetch REST /api/v1| API
-    API -->|SDK @supabase/supabase-js| Supabase[(Supabase<br/>PostgreSQL)]
-    API -->|Verifica JWT / Supabase Auth| Auth[Supabase Auth]
-    API -->|Inserta ReservaRealizadaEvent| EventLog[(eventos_log)]
-    Supabase --- Data[(alojamientos · reservas)]
+**Condición habilitante de despliegue: pendiente de verificación/recuperación.**
+Antes de marcarla como cumplida en una rúbrica, confirma en Render que el
+servicio esté `Live`, revisa sus logs y ejecuta una prueba HTTP exitosa de las
+tres URLs públicas. Comprueba además el acceso a Supabase desde la aplicación.
+
+## 2. Matriz de Cumplimiento de Criterios de Evaluación
+
+La matriz refleja el estado comprobable en el código y la verificación de nube
+realizada; no convierte una función implementada localmente en una afirmación
+de disponibilidad externa.
+
+| Criterio de Evaluación                   |                  Estado                  | Evidencia Técnica / Ubicación                                                                                                                         |
+| :--------------------------------------- | :--------------------------------------: | :---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Despliegue en la nube                    |         **No verificable (503)**         | Blueprint y [Dockerfile](./Dockerfile); las URLs públicas consultadas devolvieron HTTP 503                                                            |
+| Panel de Administración funcional        | **Cumple en código; nube no verificada** | [public/admin/](./public/admin/), `GET /api/v1/admin/eventos`, CRUD protegido por guards `admin`                                                      |
+| Marketplace web funcional                | **Cumple en código; nube no verificada** | [public/](./public/), catálogo y filtros consumen `GET /api/v1/alojamientos`                                                                          |
+| APIs implementadas y documentadas        |         **Cumple parcialmente**          | Controladores NestJS y Swagger generado en `/api/docs`; el documento runtime no es idéntico al contrato oficial                                       |
+| Base de datos operativa (3FN)            | **Parcial; no se acredita 3FN estricta** | [database/schema.sql](./database/schema.sql) define `alojamientos`, `reservas`, `eventos_log`; no crea tabla `proveedores`, `servicios` ni `imagenes` |
+| Diseño API-First y contratos             |               **Parcial**                | Hay DTOs, validación y contrato oficial en [contracts/](./contracts/); los recursos y rutas locales no coinciden estrictamente con el contrato GDS    |
+| Endpoints para interoperabilidad         |     **Cumple en forma de respuesta**     | Mappers camelCase ↔ snake_case en `src/modules/*/entities/*mapper.ts`                                                                                 |
+| Arquitectura EDA / Orientada a Eventos   |         **Parcial / prototipo**          | `ReservaRealizadaEvent` se inserta en `eventos_log`; no existe broker, Outbox ni atomicidad reserva-evento                                            |
+| Documentación técnica                    |                **Cumple**                | Este README, esquemas ER, guía local y notas de despliegue                                                                                            |
+| Dominio del código y decisiones técnicas |  **Documentado; requiere sustentación**  | NestJS modular, Supabase Auth/RLS, roles, DTOs y mapeadores explicados en este documento                                                              |
+
+### Observaciones importantes para la evaluación
+
+1. El archivo oficial [alojamientos-openapi.yaml](./contracts/alojamientos-openapi.yaml)
+   describe **GDS Alojamientos Core API v1.0.0**: incluye rutas como `/search`
+   y `/orders/create`, y no define el conjunto local
+   `/api/v1/alojamientos` y `/api/v1/reservas` ni los modelos solicitados en
+   este prototipo. NestJS toma del YAML el título, la descripción, la versión y
+   las etiquetas para Swagger; genera sus rutas a partir de los controladores.
+   Por tanto, **no se declara conformidad estricta** entre ambos contratos.
+2. El esquema actual contiene tres tablas de dominio. `proveedor_id` es un UUID
+   sin tabla `proveedores` ni clave foránea en el script actual.
+3. `servicios` e `imagenes` son arreglos PostgreSQL `TEXT[]`, no JSONB ni tablas
+   relacionales propias. `coordenadas` y el payload de eventos sí son `JSONB`.
+   Esta decisión del prototipo significa que no se debe presentar el esquema
+   como normalizado estrictamente en 3FN.
+4. El pago es una simulación local. No hay cobro real ni integración con
+   pasarela de pagos.
+5. La API guarda la reserva y luego escribe el evento en otra operación REST.
+   Si falla la escritura del evento, la reserva podría ya existir.
+
+## 3. Justificación Detallada por Criterio
+
+### 3.1 Despliegue y Accesibilidad Pública
+
+Enlaces públicos objetivo:
+
+- Marketplace: <https://booking-alojamiento.onrender.com/marketplace/>
+- Panel de Administración: <https://booking-alojamiento.onrender.com/admin/>
+- Documentación Swagger: <https://booking-alojamiento.onrender.com/api/docs>
+
+El servicio se configura como **Render Web Service con runtime Docker**. El
+[Dockerfile](./Dockerfile) compila NestJS en una etapa de build y copia el
+resultado, los recursos públicos y el contrato YAML a la imagen de runtime.
+[render.yaml](./render.yaml) declara el servicio y usa `/api/docs` como health
+check.
+
+**Estado comprobado el 2026-10-07:** las solicitudes a Marketplace y
+`/api/docs-json` devolvieron HTTP 503. Los enlaces son direcciones previstas,
+no evidencia suficiente de que la aplicación esté operativa. Para completar
+este criterio:
+
+1. Revisa en Render el estado `Live`, los deploys y los logs de arranque.
+2. Verifica que estén definidas las variables de entorno que exige el backend.
+3. Comprueba que el SQL de esquema/migración se ejecutó en el proyecto Supabase
+   que corresponde a esas variables.
+4. Repite la validación de Marketplace, Panel y Swagger. No publiques
+   credenciales de Supabase como evidencia.
+
+Render inyecta `PORT`; localmente la aplicación usa 3000 por defecto.
+
+### 3.2 Sistema de Administración
+
+El Panel permite consultar alojamientos, crear, editar y eliminar registros,
+consultar reservas y visualizar eventos. Sus recursos de interfaz están en
+[public/admin/](./public/admin/). La página valida la sesión antes de mostrar
+el contenido, oculta la navegación administrativa en el Marketplace para
+usuarios no admin y redirige al Marketplace a los clientes que intenten abrir
+el Panel.
+
+La protección efectiva no depende solo de la interfaz:
+
+- `POST`, `PUT` y `DELETE /api/v1/alojamientos` requieren el rol `admin`.
+- `GET /api/v1/admin/eventos` requiere `admin`.
+- `GET /api/v1/reservas` requiere `admin`.
+- El rol se deriva del `app_metadata.role` retornado por Supabase Auth tras
+  validar el Bearer token; un valor de `user_metadata` no concede privilegios.
+- Las rutas protegidas responden 401 si falta o no sirve el token y 403 si el
+  usuario autenticado no tiene el rol necesario.
+
+#### Acceso administrativo de prueba
+
+El repositorio incluye
+[scripts/seed-admin.mjs](./scripts/seed-admin.mjs), que crea o actualiza el
+usuario `admin@booking.ec`, confirma su correo y asigna
+`app_metadata.role = admin`. **El usuario no se crea automáticamente por
+documentar las credenciales.** Debe ejecutarse el script de forma explícita
+con `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` y `ADMIN_SEED_PASSWORD`
+configurados.
+
+Para un entorno local aislado, asigna a `ADMIN_SEED_PASSWORD` la contraseña
+temporal para pruebas solicitada por el equipo docente y ejecuta:
+
+```powershell
+npm run seed:admin
 ```
 
-- `src/modules/accommodations`: CRUD REST de alojamientos.
-- `src/modules/reservations`: creación y consulta de reservas y registro del
-  evento `ReservaRealizadaEvent`.
-- `src/modules/admin`: consulta de eventos para monitoreo EDA.
-- `src/supabase`: proveedor compartido del SDK oficial de Supabase.
-- `public/` y `public/admin/`: interfaces servidas por NestJS desde el mismo
-  origen que la API.
+El valor de contraseña no se incorpora a código ni al README como secreto. El
+script actualiza la contraseña cada vez que se ejecuta. **No uses la clave de
+prueba en producción**; usa una contraseña única y cámbiala antes de publicar.
 
-### Modelo de datos de Supabase
+### 3.3 Marketplace Web
 
-El esquema SQL completo y las semillas están en
-[`database/schema.sql`](./database/schema.sql). Ejecútalo en el SQL Editor de
-Supabase antes de iniciar el servicio. Si ya aplicaste el esquema anterior,
-ejecuta primero
-[`database/migrations/20261007_contract_alignment.sql`](./database/migrations/20261007_contract_alignment.sql).
+La interfaz estática se sirve desde [public/](./public/) bajo
+`/marketplace/`. Permite:
+
+- Consultar el catálogo desde `GET /api/v1/alojamientos`.
+- Filtrar por `ciudad` y `precioMaximo`.
+- Abrir la ficha del alojamiento, consultar descripción, capacidad, servicios,
+  imágenes y política de cancelación.
+- Calcular en el navegador un estimado por noches y enviar la reserva a
+  `POST /api/v1/reservas`.
+- Iniciar sesión o registrarse como cliente para reservar.
+
+El backend vuelve a validar fechas, capacidad y disponibilidad, y calcula el
+total a partir del precio guardado, en vez de confiar en el importe calculado
+por el navegador. El resultado de pago es **simulado**; no se contacta ni se
+cobra a una pasarela financiera.
+
+### 3.4 APIs y Documentación Swagger/OpenAPI
+
+Swagger se publica en `/api/docs`. La aplicación carga en runtime los
+metadatos `info` y `tags` del YAML oficial, y genera el documento operativo
+desde los controladores y DTOs NestJS. Los métodos protegidos indican el
+esquema Bearer `supabase-jwt`.
+
+#### Endpoints del prototipo
+
+| Método   | Ruta                       | Acceso                                    |
+| :------- | :------------------------- | :---------------------------------------- |
+| `POST`   | `/api/v1/auth/register`    | Público; crea exclusivamente clientes     |
+| `POST`   | `/api/v1/auth/login`       | Público                                   |
+| `GET`    | `/api/v1/auth/me`          | JWT válido                                |
+| `GET`    | `/api/v1/alojamientos`     | Público; filtros `ciudad`, `precioMaximo` |
+| `GET`    | `/api/v1/alojamientos/:id` | Público                                   |
+| `POST`   | `/api/v1/alojamientos`     | Solo `admin`                              |
+| `PUT`    | `/api/v1/alojamientos/:id` | Solo `admin`                              |
+| `DELETE` | `/api/v1/alojamientos/:id` | Solo `admin`                              |
+| `POST`   | `/api/v1/reservas`         | Solo `cliente` autenticado                |
+| `GET`    | `/api/v1/reservas`         | Solo `admin`                              |
+| `GET`    | `/api/v1/admin/eventos`    | Solo `admin`                              |
+
+#### Contrato de la materia frente a la API implementada
+
+Se preserva sin modificaciones el archivo
+[contracts/alojamientos-openapi.yaml](./contracts/alojamientos-openapi.yaml).
+Este contrato oficial define el dominio GDS, con operaciones como búsqueda,
+disponibilidad y órdenes; no contiene las rutas locales anteriores ni los
+modelos de alojamiento/reserva usados por esta aplicación. El documento
+Swagger runtime describe la API NestJS y reutiliza metadatos del YAML, pero no
+es una implementación exacta de todas sus operaciones.
+
+La alineación estricta requiere una decisión del curso/equipo: actualizar el
+API local al contrato GDS sin romper el producto, o acordar y versionar un
+contrato complementario para el prototipo. Este README no declara equivalencia
+que no está presente en el código.
+
+### 3.5 Base de Datos Supabase y Normalización
+
+El esquema nuevo está en [database/schema.sql](./database/schema.sql). Para
+una base que ya tenía la estructura anterior se proporcionan
+[20261007_contract_alignment.sql](./database/migrations/20261007_contract_alignment.sql)
+y
+[20261008_auth_and_rls.sql](./database/migrations/20261008_auth_and_rls.sql).
+Los scripts deben ejecutarse en Supabase con una cuenta autorizada.
 
 ```mermaid
 erDiagram
+    AUTH_USERS ||--o{ RESERVAS : "cliente_id (nullable)"
+    ALOJAMIENTOS ||--o{ RESERVAS : "alojamiento_id"
     ALOJAMIENTOS {
         uuid id PK
         uuid proveedor_id
         text nombre
-        text descripcion
         text tipo
         text ciudad
         text direccion
         jsonb coordenadas
-        decimal precio_base_noche
-        text moneda
-        int capacidad_maxima
-        int habitaciones_disponibles
-        text[] servicios
+        numeric precio_base_noche
+        varchar moneda
+        integer capacidad_maxima
+        integer habitaciones_disponibles
+        text_array servicios
+        text_array imagenes
         text politica_cancelacion
-        text[] imagenes
-        timestamp created_at
     }
-
     RESERVAS {
         uuid id PK
         uuid alojamiento_id FK
         uuid cliente_id FK
         text cliente_nombre
         text cliente_email
-        text cliente_telefono
         date fecha_checkin
         date fecha_checkout
-        int num_huespedes
-        decimal precio_total
-        text moneda
+        integer num_huespedes
+        numeric precio_total
         text metodo_pago_simulado
         text pago_estado
-        uuid pago_referencia
         text estado
-        timestamp created_at
     }
-
     EVENTOS_LOG {
         uuid id PK
         text tipo_evento
         jsonb payload
-        timestamp creado_en
+        timestamptz creado_en
     }
-
-    ALOJAMIENTOS ||--o{ RESERVAS : recibe
 ```
 
-`eventos_log.payload` guarda el contenido del evento como JSONB; se deja sin
-clave foránea intencionalmente para poder registrar eventos de diferentes
-dominios e integraciones.
+Entidades de la aplicación:
 
-### Ejecución local
+- **Alojamientos:** catálogo, proveedor identificado por un UUID externo y
+  valores de ubicación/precio/capacidad.
+- **Reservas:** referencia obligatoria al alojamiento y referencia nullable
+  al usuario de `auth.users`; conserva datos del huésped y del precio al
+  momento de reservar.
+- **EventosLog:** registro JSONB de eventos del dominio; no tiene FK a la
+  reserva para admitir eventos de integración de distintos dominios.
 
-Configura las variables en `.env` (puedes partir de `.env.example`; nunca
-incluyas claves reales en Git):
+**Nota de normalización:** no hay tabla `proveedores` en este esquema y
+`proveedor_id` no declara FK. `servicios` e `imagenes` son columnas PostgreSQL
+`TEXT[]`; los documentos JSONB son `coordenadas` y `eventos_log.payload`. Por
+lo tanto, el esquema no demuestra normalización estricta en 3FN. Para afirmar
+3FN, una iteración deberá crear entidades/tablas de proveedores, servicios e
+imágenes con relaciones y migrar los datos, manteniendo aparte el snapshot
+transaccional que se requiera en una reserva.
+
+El script aplica RLS a las tablas públicas: el catálogo es legible, pero las
+escrituras directas de `anon`/`authenticated` y el acceso directo a reservas y
+eventos se revocan. El servidor usa la clave service-role para acceder a datos
+solo después de autorizar la petición con NestJS. La clave service-role elude
+RLS y nunca debe enviarse al navegador.
+
+### 3.6 Diseño API-First e Interoperabilidad
+
+Los controladores y DTOs dan forma explícita a los cuerpos HTTP y aplican
+validación con `class-validator`, `class-transformer` y `ValidationPipe`.
+Los mappers convierten la nomenclatura de PostgreSQL a la respuesta camelCase
+del API:
+
+```text
+precio_base_noche  <->  precioBaseNoche
+alojamiento_id     <->  alojamientoId
+fecha_checkin      <->  fechaCheckin
+```
+
+La correspondencia es explícita en
+`src/modules/accommodations/entities/alojamiento.mapper.ts` y
+`src/modules/reservations/entities/reserva.mapper.ts`. Los DTOs conservan
+campos como `proveedorId`, `nombre`, `coordenadas`, `precioBaseNoche`,
+`clienteNombre`, `fechaCheckin` y `metodoPagoSimulado`. La interoperabilidad
+camelCase de las respuestas sí está implementada; no implica conformidad con
+los paths o esquemas del YAML oficial que son distintos.
+
+### 3.7 Arquitectura SOA/EDA y Eventos
+
+Al crear una reserva, el servicio calcula el precio, inserta la reserva con
+estado de pago simulado `exitoso` y estado `confirmada`, y después inserta un
+evento `ReservaRealizadaEvent` en `eventos_log`. El payload contiene
+`eventId`, `eventType`, `occurredAt` y datos de la reserva. El Panel Admin
+consulta ese registro para monitorear el flujo.
+
+El estado actual es una **preparación EDA**, no un bus de eventos. Las dos
+escrituras a Supabase no son una transacción atómica; si la segunda falla, la
+reserva puede persistir sin evento. Para robustecerlo en una siguiente fase:
+
+1. Insertar reserva y Outbox dentro de una transacción PostgreSQL.
+2. Publicar Outbox en RabbitMQ, Kafka, Pub/Sub u otro broker mediante un
+   dispatcher con reintentos.
+3. Definir contrato versionado (por ejemplo, AsyncAPI/JSON Schema), claves de
+   idempotencia, correlación y trazabilidad.
+4. Crear consumidores desacoplados de notificaciones, facturación y analítica,
+   con dead-letter queue y métricas.
+
+### 3.8 Estructura del Proyecto y Decisiones Arquitecturales
+
+```text
+.
+├── contracts/
+│   └── alojamientos-openapi.yaml   # contrato oficial, sin cambios
+├── database/
+│   ├── schema.sql                 # esquema inicial, políticas y semillas
+│   └── migrations/                # evolución del modelo y seguridad
+├── public/
+│   ├── index.html, app.js, ...    # Marketplace
+│   ├── auth-client.js
+│   ├── login/                     # acceso y registro
+│   └── admin/                     # Panel Admin
+├── scripts/
+│   └── seed-admin.mjs             # alta/actualización admin explícita
+└── src/
+    ├── modules/
+    │   ├── accommodations/        # catálogo CRUD, DTOs y mappers
+    │   ├── reservations/          # reservas y evento de dominio
+    │   ├── admin/                 # consulta de eventos
+    │   └── auth/                  # Supabase Auth y guards de roles
+    ├── supabase/                  # clientes Supabase de servidor/Auth
+    ├── app.module.ts
+    └── main.ts                    # CORS, validación y Swagger
+```
+
+Decisiones:
+
+- **NestJS:** módulos, inyección de dependencias, DTOs, validación y guards
+  hacen explícita la separación entre catálogo, reservas, administración y
+  autenticación.
+- **Supabase:** aporta PostgreSQL administrado y Supabase Auth; sus claves
+  pública y service-role se separan, y RLS constituye defensa adicional para
+  el acceso directo a las tablas.
+- **Render:** aloja el contenedor Docker mediante un Web Service y permite
+  configurar secretos de ejecución sin incorporarlos a la imagen.
+- **HTML/CSS/JavaScript:** Marketplace y Panel estáticos servidos desde NestJS
+  en el mismo origen, evitando una capa adicional de hosting frontend en el
+  prototipo.
+
+## 4. Instalación y Ejecución Local
+
+### Requisitos
+
+- Node.js 22 o compatible con el comando `node --env-file-if-exists`.
+- npm.
+- Proyecto Supabase con Auth y PostgreSQL habilitados.
+- Docker es necesario solo para construir/ejecutar la imagen.
+
+### Variables de entorno
+
+Copia [.env.example](./.env.example) a `.env` y completa los secretos localmente:
 
 ```env
 SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_KEY=your-supabase-anon-or-publishable-key
-SUPABASE_SERVICE_ROLE_KEY=your-private-supabase-service-role-key
-ADMIN_SEED_PASSWORD=replace-with-a-unique-password-of-at-least-12-characters
+SUPABASE_KEY=your-anon-or-publishable-key
+SUPABASE_SERVICE_ROLE_KEY=your-private-service-role-key
+ADMIN_SEED_PASSWORD=una-clave-local-segura-de-al-menos-12-caracteres
 PORT=3000
 ```
 
-Instala dependencias y ejecuta `npm install`, luego inicia con
-`npm run start:dev`. Las rutas locales son:
+No agregues `.env` al repositorio. `SUPABASE_KEY` es para los flujos de Auth;
+`SUPABASE_SERVICE_ROLE_KEY` solo se usa por el servidor y script de seeding.
 
-- Swagger: `http://localhost:3000/api/docs`
-- Marketplace: `http://localhost:3000/marketplace/`
-- Login/registro: `http://localhost:3000/login/`
-- Panel Admin: `http://localhost:3000/admin/`
+### Preparar base y arrancar
 
-#### Autenticación y roles
+1. Para proyecto nuevo, ejecuta [database/schema.sql](./database/schema.sql)
+   en el SQL Editor de Supabase.
+2. Para una base previa, ejecuta primero
+   `database/migrations/20261007_contract_alignment.sql` y después
+   `database/migrations/20261008_auth_and_rls.sql`.
+3. Instala y compila:
 
-- `POST /api/v1/auth/register` crea únicamente cuentas `cliente`; el cuerpo no
-  acepta ningún campo de rol.
-- `POST /api/v1/auth/login` devuelve un JWT de Supabase Auth y el rol del
-  usuario. El navegador conserva el access token en `sessionStorage`.
-- `GET /api/v1/auth/me` valida el token Bearer y devuelve el perfil autenticado.
-- El rol se lee exclusivamente de `app_metadata.role` (administrado por el
-  servidor), nunca de `user_metadata` ni de valores enviados por el cliente.
-- La creación de reservas requiere un usuario `cliente`; el `cliente_id` se
-  toma del JWT verificado y no se acepta desde el cuerpo.
-- La consulta de reservas, `/api/v1/admin/*` y las escrituras CRUD de
-  alojamientos requieren `admin`. El catálogo `GET /api/v1/alojamientos`
-  permanece público.
-- Las políticas RLS dejan el catálogo en lectura pública y bloquean el acceso
-  directo de `anon`/`authenticated` a reservas, eventos y escrituras; NestJS
-  usa `SUPABASE_SERVICE_ROLE_KEY` únicamente en el servidor. Nunca se debe
-  publicar esa clave en HTML, JavaScript, Git ni variables `VITE_*`.
+   ```powershell
+   npm install
+   npm run build
+   ```
 
-Para crear o actualizar el administrador local, configura en `.env` la clave
-de servicio privada y `ADMIN_SEED_PASSWORD`. Para el usuario de prueba
-solicitado usa `admin@booking.ec` y guarda la contraseña temporal indicada
-para pruebas en `ADMIN_SEED_PASSWORD`, solo en un entorno de desarrollo
-aislado. El script fija `app_metadata.role` como `admin`, confirma el correo y
-reinicia la contraseña al ejecutarse:
+4. Inicia en desarrollo:
 
-```powershell
-npm run seed:admin
-```
+   ```powershell
+   npm run start:dev
+   ```
 
-No se incluye esa contraseña en código ni en archivos versionados. Cámbiala
-antes de publicar; nunca uses la contraseña de prueba en producción. Protege la
-clave service-role con los secretos del entorno y rota cualquier clave que
-haya sido expuesta.
+5. Si necesitas el usuario de demostración, configura `ADMIN_SEED_PASSWORD`
+   localmente y ejecuta `npm run seed:admin`.
 
-La API devuelve claves camelCase y mapea las columnas snake_case de PostgreSQL.
-Usa `GET/POST /api/v1/alojamientos`, `GET/PUT/DELETE
-/api/v1/alojamientos/:id`, `GET/POST /api/v1/reservas` y
-`GET /api/v1/admin/eventos`. Para alojamientos, el filtro de catálogo es
-`ciudad` y `precioMaximo`.
+Rutas locales con `PORT=3000`:
 
-El endpoint POST de reservas calcula `precioTotal` por noches, simula un pago
-exitoso (sin cobrar dinero), guarda la reserva con `pagoEstado: "exitoso"` y
-`estado: "confirmada"`, y escribe `ReservaRealizadaEvent` en `eventos_log`.
+- Marketplace: <http://localhost:3000/marketplace/>
+- Login/registro: <http://localhost:3000/login/>
+- Panel Admin: <http://localhost:3000/admin/>
+- Swagger: <http://localhost:3000/api/docs>
 
-Swagger importa el título, la descripción y la versión desde
-[`contracts/alojamientos-openapi.yaml`](./contracts/alojamientos-openapi.yaml).
-**Compatibilidad del contrato:** el YAML oficial describe la API GDS con rutas
-como `/search` y `/orders/create`, esquemas de reserva distintos y establece
-que los pagos pertenecen a otro dominio. No contiene las entidades camelCase
-indicadas para este prototipo. Por ello, las rutas `/api/v1/alojamientos` y
-`/api/v1/reservas` conservan los campos solicitados y Swagger importa los
-metadatos oficiales; el pago es una simulación local, no una integración
-financiera ni compatibilidad completa con las operaciones GDS. Para conformidad
-completa habría que acordar y añadir un contrato OpenAPI complementario para
-este API.
-
-### Despliegue en Render
-
-El repositorio incluye un [`Dockerfile`](./Dockerfile) multi-stage y
-[`render.yaml`](./render.yaml) para crear un servicio Docker. Para desplegar:
-
-1. Sube este repositorio a GitHub y confirma que contiene `Dockerfile`,
-   `.dockerignore` y `render.yaml`.
-2. En Render, selecciona **New + → Blueprint**, conecta el repositorio y
-   confirma la creación del servicio `booking-alojamiento`.
-3. En **Dashboard → servicio → Environment**, configura
-   `SUPABASE_URL`, `SUPABASE_KEY` y `SUPABASE_SERVICE_ROLE_KEY` usando las claves
-   del proyecto Supabase. La service-role key es un secreto privado del
-   backend; no la compartas con el navegador.
-   `render.yaml` las declara como secretos no sincronizados (`sync: false`),
-   por lo que Render solicitará sus valores.
-4. Ejecuta [`database/schema.sql`](./database/schema.sql) en el SQL Editor de
-   Supabase para una base nueva. En una instalación existente, aplica también
-   [`database/migrations/20261008_auth_and_rls.sql`](./database/migrations/20261008_auth_and_rls.sql)
-   después de la migración de alineación. Espera a que el despliegue indique
-   **Live**, ejecuta el sembrado admin como proceso local/one-off con los
-   secretos configurados y verifica el inicio de sesión.
-
-Render inyecta `PORT` automáticamente; la aplicación escucha en
-`process.env.PORT` y, si no se define, usa `3000` para desarrollo local. No es
-necesario fijar `PORT` en `render.yaml`. Para ejecutar la imagen localmente,
-puedes establecer `PORT=10000` o mapear el puerto del contenedor:
+Comandos de calidad:
 
 ```powershell
-docker build -t booking-alojamiento .
-docker run --rm -p 3000:10000 `
-  -e PORT=10000 `
-  -e SUPABASE_URL=https://your-project.supabase.co `
-  -e SUPABASE_KEY=your-supabase-anon-or-publishable-key `
-  -e SUPABASE_SERVICE_ROLE_KEY=your-private-supabase-service-role-key `
-  booking-alojamiento
+npm test -- --runInBand
+npm run build
+npm run lint
 ```
 
-No pases secretos durante `docker build`, no los escribas en el Dockerfile ni
-los incluyas en el repositorio. Usa variables **Environment** secretas del
-servicio Render. `SUPABASE_KEY` es la clave anon/publishable para Auth;
-`SUPABASE_SERVICE_ROLE_KEY` solo se configura como secreto backend para acceder
-a datos detrás de los guards de NestJS.
+## 5. Despliegue en Render
 
-#### Enlaces públicos
+El Blueprint propone un Web Service Docker y requiere definir secretos en
+**Dashboard → Environment**:
 
-El Blueprint propone el dominio `booking-alojamiento.onrender.com`. Una vez
-desplegado, Render puede asignar o permitir cambiar el hostname; reemplaza el
-dominio de ejemplo por el que figure en **Settings → Domains**:
+| Variable                    | Uso                                                        |
+| :-------------------------- | :--------------------------------------------------------- |
+| `SUPABASE_URL`              | URL del proyecto Supabase                                  |
+| `SUPABASE_KEY`              | Clave anon/publishable para Auth                           |
+| `SUPABASE_SERVICE_ROLE_KEY` | Acceso privado del backend a PostgreSQL/Auth Admin         |
+| `PORT`                      | Render la inyecta para el servicio; localmente se usa 3000 |
 
-- Swagger: [https://booking-alojamiento.onrender.com/api/docs](https://booking-alojamiento.onrender.com/api/docs)
-- Marketplace: [https://booking-alojamiento.onrender.com/marketplace/](https://booking-alojamiento.onrender.com/marketplace/)
-- Panel Admin: [https://booking-alojamiento.onrender.com/admin/](https://booking-alojamiento.onrender.com/admin/)
+La clave service-role puede saltarse RLS: limita su uso al backend, no la
+incluyas en Docker build args, código cliente o commits. Ejecuta el seeding
+administrativo fuera del navegador, con secretos, como proceso local u
+operación one-off. Las variables `SUPABASE_URL` y claves son necesarias para
+que NestJS inicie; si faltan o no corresponden, el servicio no podrá operar.
 
-Los enlaces anteriores quedan activos únicamente después del despliegue exitoso.
+Después del deploy verifica, como mínimo:
 
-> **Operación segura:** la service-role key elude RLS y, por ello, solo debe
-> existir en el backend. RLS protege el acceso directo de los clientes; los
-> guards de NestJS protegen los endpoints del API. Mantén ambas capas y usa una
-> contraseña admin única, fuerte y rotada en producción.
-
-### Próximas integraciones SOA/EDA (Reto 2)
-
-1. **Publicación fiable:** guardar la reserva y un registro Outbox en una única
-   transacción PostgreSQL; el proceso actual hace dos llamadas REST separadas,
-   por lo que una reserva puede guardarse aunque falle la escritura del evento.
-2. **Broker y desacoplamiento:** publicar el Outbox en RabbitMQ, Google Pub/Sub,
-   AWS SNS/SQS o Kafka mediante un dispatcher; no acoplar el request HTTP al
-   consumidor.
-3. **Consumidores por dominio:** agregar servicios suscriptores para
-   notificaciones, facturación y analítica, independientes del módulo de
-   reservas.
-4. **Contratos evolutivos:** definir JSON Schema/AsyncAPI, versión del evento,
-   `event_id`, `occurred_at`, `correlation_id` y metadatos del productor.
-5. **Entrega segura:** consumidores idempotentes, reintentos con backoff,
-   dead-letter queue, trazabilidad y métricas; monitorear retrasos, errores y
-   eventos pendientes desde el panel.
-6. **Integración SOA:** exponer adaptadores para pagos, correo y canales
-   externos usando contratos explícitos, credenciales por servicio y límites
-   de tiempo.
-
-El endpoint `/api/v1/admin/eventos` ofrece una vista de los eventos guardados
-en PostgreSQL; `eventos_log` es por ahora un registro de eventos y todavía no es
-un broker ni garantiza entrega exactamente una vez.
-
-## Project setup
-
-```bash
-$ npm install
+```text
+GET https://booking-alojamiento.onrender.com/api/docs
+GET https://booking-alojamiento.onrender.com/marketplace/
+GET https://booking-alojamiento.onrender.com/admin/
 ```
 
-## Compile and run the project
+La página `/admin/` redirige a login sin una sesión admin; un HTTP 200 del HTML
+no prueba por sí solo que la autorización ni Supabase funcionen. Prueba además
+login, `/api/v1/auth/me`, lectura del catálogo y acceso denegado para una
+cuenta cliente. Registra la fecha y el resultado real de esas pruebas antes de
+afirmar que el despliegue está operativo.
 
-```bash
-# development
-$ npm run start
+## 6. Alcance, Limitaciones y Próximos Pasos
 
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
-```
-
-## Run tests
-
-```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
-```
-
-## Deployment
-
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
-```
-
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Observability
-
-In production applications, observability is essential for understanding how your system behaves, detecting issues early, and maintaining reliable performance.
-
-[NestJS Observe](https://observe.nestjs.com) automatically instruments your NestJS application, giving you deep visibility into your system with minimal setup:
-
-- **Distributed tracing:** Follow requests across services and understand how they flow through your system.
-- **Waterfall analysis:** Visualize request execution and identify slow operations, bottlenecks, and unexpected delays.
-- **Performance analysis:** Analyze application performance in real time and quickly pinpoint areas that need optimization.
-- **Metrics:** Track key application and infrastructure metrics to understand system health and performance trends.
-- **Logging:** Centralize and correlate logs with traces and other telemetry to make debugging easier.
-- **Error tracking:** Detect errors quickly and investigate their root causes with the surrounding context.
-- **SLA monitoring:** Track service-level objectives and identify when your application is approaching or exceeding defined thresholds.
-- **Alarms and alerts:** Set up alerts for critical errors, performance degradation, SLA violations, and other anomalies so your team can react quickly.
-
-To add it to this project:
-
-```bash
-$ npm install @nestjs/observe
-```
-
-Then follow the [setup guide](https://docs.nestjs.com/observability/overview) - it takes a single import and an app key.
-
-The free plan needs no payment details and covers 300,000 events a month. You can also browse the [live demo](https://www.observe-demo.nestjs.com/dashboard) first - the whole dashboard over a busy service's data, with nothing to install.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Auto-instrument your application with [NestJS Observe](https://observe.nestjs.com). Distributed tracing, metrics, and logging made easy. Error tracking and performance monitoring for your NestJS applications.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+- Recuperar/verificar el servicio Render y probar la conexión a Supabase en la
+  URL pública.
+- Resolver con la materia la discrepancia entre el YAML GDS oficial y las
+  rutas/modelos locales, manteniendo el archivo oficial intacto hasta tener
+  aprobación para un contrato complementario.
+- Normalizar proveedores, servicios e imágenes si 3FN es un criterio
+  obligatorio.
+- Añadir Outbox transaccional y broker para entrega confiable de eventos.
+- Integrar una pasarela de pago real solo con un contrato de pagos aprobado;
+  hoy el pago es simulado.
+- Definir política operacional de rotación de secretos, respaldo, logs,
+  monitoreo, límites de tasa y autenticación de producción.

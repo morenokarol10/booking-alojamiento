@@ -6,6 +6,8 @@ const registerTab = document.querySelector('#register-tab');
 
 function showMode(mode) {
   const isRegister = mode === 'register';
+  loginForm.reset();
+  registerForm.reset();
   loginForm.hidden = isRegister;
   registerForm.hidden = !isRegister;
   loginTab.classList.toggle('active', !isRegister);
@@ -52,7 +54,12 @@ async function submitAuth(form, path, successText) {
 
     const { user, session } = result.data;
     if (!session) {
-      showNotice(result.message || 'Confirma tu correo para iniciar sesión.');
+      showNotice(
+        result.message ||
+          (path === 'register'
+            ? 'Revisa tu correo y confirma la cuenta antes de iniciar sesión.'
+            : 'No se inició sesión. Verifica tus credenciales.'),
+      );
       return;
     }
 
@@ -77,6 +84,7 @@ async function submitAuth(form, path, successText) {
   } catch (error) {
     showNotice(error.message || 'No se pudo conectar con el servidor.', true);
   } finally {
+    form.reset();
     button.disabled = false;
     button.textContent = originalText;
   }

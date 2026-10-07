@@ -155,6 +155,17 @@ El valor de contraseña no se incorpora a código ni al README como secreto. El
 script actualiza la contraseña cada vez que se ejecuta. **No uses la clave de
 prueba en producción**; usa una contraseña única y cámbiala antes de publicar.
 
+#### Registro e inicio de sesión de clientes
+
+El registro usa Supabase Auth (`auth.users`), no una tabla pública propia. Si
+Supabase devuelve una cuenta sin sesión, el registro fue aceptado pero requiere
+confirmar el enlace enviado al correo antes de iniciar sesión. Si no llegan los
+correos, revisa spam y la configuración de Auth > Email en Supabase. Desactivar
+la confirmación de correo permite iniciar sesión inmediatamente, pero debe ser
+una decisión explícita del administrador del proyecto. Si Supabase indica que
+el correo ya existe, prueba iniciar sesión con esa cuenta. Los formularios
+limpian correo y contraseña al terminar cada intento.
+
 #### Carga de alojamientos de prueba
 
 [scripts/seed-alojamientos.mjs](./scripts/seed-alojamientos.mjs) carga diez

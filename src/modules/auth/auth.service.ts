@@ -35,6 +35,7 @@ export class AuthService {
         'Supabase no devolvió el usuario creado.',
       );
     }
+    const accountAlreadyExists = data.user.identities?.length === 0;
 
     return {
       data: {
@@ -50,7 +51,9 @@ export class AuthService {
       },
       message: data.session
         ? 'Cuenta de cliente creada correctamente.'
-        : 'Cuenta creada. Confirma tu correo para poder iniciar sesión.',
+        : accountAlreadyExists
+          ? 'No se pudo crear una cuenta nueva con ese correo. Si ya te registraste, inicia sesión; si no, revisa el correo ingresado.'
+          : 'La cuenta se registró en Supabase Auth. Confirma el correo enviado por Supabase antes de iniciar sesión.',
     };
   }
 

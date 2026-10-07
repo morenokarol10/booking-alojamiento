@@ -155,6 +155,22 @@ El valor de contraseña no se incorpora a código ni al README como secreto. El
 script actualiza la contraseña cada vez que se ejecuta. **No uses la clave de
 prueba en producción**; usa una contraseña única y cámbiala antes de publicar.
 
+Si el usuario administrador fue eliminado, el script de rescate
+[scripts/crear-admin-rescate.mjs](./scripts/crear-admin-rescate.mjs) lo vuelve
+a crear con correo confirmado y rol `admin`, o actualiza el usuario si ya
+existe. Lee las credenciales exclusivamente desde el `.env` local ignorado por
+Git y sincroniza `id`/`role` en `public.usuarios` y `public.proveedores` cuando
+esas tablas aceptan ambas columnas:
+
+```powershell
+node scripts/crear-admin-rescate.mjs
+```
+
+Usa una contraseña temporal y privada en `ADMIN_SEED_PASSWORD`; no la escribas
+en el script ni la publiques en GitHub. Como el script actualiza la contraseña
+si el administrador ya existe, ejecútalo solo contra el proyecto Supabase
+correcto.
+
 #### Registro e inicio de sesión de clientes
 
 El registro usa Supabase Auth (`auth.users`), no una tabla pública propia. El

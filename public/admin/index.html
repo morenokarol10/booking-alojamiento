@@ -1,0 +1,610 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Panel de administración y monitoreo de alojamientos."
+    />
+    <meta name="theme-color" content="#f5f6f3" />
+    <title>Administración — Estadía</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/admin/admin.css" />
+    <script src="/admin/admin.js" defer></script>
+  </head>
+  <body>
+    <aside class="sidebar">
+      <a class="brand" href="/marketplace/" aria-label="Estadía">
+        <span class="brand-mark" aria-hidden="true">e</span>
+        <span>estadía</span>
+      </a>
+      <div class="sidebar-label">ESPACIO DE TRABAJO</div>
+      <nav class="side-nav" aria-label="Navegación del panel">
+        <a class="side-link active" href="#overview" aria-current="page">
+          <span class="nav-icon" aria-hidden="true">▦</span> Resumen
+        </a>
+        <a class="side-link" href="#stays">
+          <span class="nav-icon" aria-hidden="true">⌂</span> Alojamientos
+          <span class="nav-count" id="nav-listing-count">—</span>
+        </a>
+        <a class="side-link" href="#bookings">
+          <span class="nav-icon" aria-hidden="true">▤</span> Reservas
+          <span class="nav-count" id="nav-booking-count">—</span>
+        </a>
+        <a class="side-link" href="#events">
+          <span class="nav-icon" aria-hidden="true">⌁</span> Eventos EDA
+        </a>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="sidebar-tip">
+          <span class="tip-icon" aria-hidden="true">✳</span>
+          <strong>Un buen anfitrión</strong>
+          <p>Una ficha actualizada ayuda a tus huéspedes a elegir mejor.</p>
+        </div>
+        <a class="profile-link" href="#overview">
+          <span class="avatar">A</span>
+          <span
+            ><strong>Administración</strong
+            ><small>Panel de gestión</small></span
+          >
+          <span class="profile-dots" aria-hidden="true">···</span>
+        </a>
+      </div>
+    </aside>
+
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="mobile-brand">
+          <a class="brand" href="/marketplace/"
+            ><span class="brand-mark" aria-hidden="true">e</span
+            ><span>estadía</span></a
+          >
+        </div>
+        <div class="breadcrumb">
+          <span>Workspace</span><span aria-hidden="true">/</span
+          ><strong>Administración</strong>
+        </div>
+        <div class="topbar-actions">
+          <span class="system-status"
+            ><span class="status-dot"></span> Panel de control</span
+          >
+          <div
+            class="mode-switch"
+            role="group"
+            aria-label="Cambiar modo de la aplicación"
+          >
+            <a class="mode-option" href="/marketplace/">Modo Marketplace</a>
+            <a class="mode-option selected" href="/admin/" aria-current="page"
+              >Modo Administración</a
+            >
+          </div>
+          <button
+            class="mobile-menu-button"
+            id="mobile-menu-button"
+            type="button"
+            aria-label="Abrir menú"
+            aria-expanded="false"
+          >
+            ☰
+          </button>
+        </div>
+      </header>
+
+      <main class="main-content" id="overview">
+        <section class="welcome-row">
+          <div>
+            <div class="date-label" id="current-date">
+              PANEL DE ADMINISTRACIÓN
+            </div>
+            <h1>Buenos días, <em>Admin.</em></h1>
+            <p>Esto es lo que está pasando con tus alojamientos hoy.</p>
+          </div>
+          <button
+            class="button button-primary"
+            id="add-listing-button"
+            type="button"
+          >
+            <span aria-hidden="true">＋</span> Agregar nuevo alojamiento
+          </button>
+        </section>
+
+        <section class="stats-grid" aria-label="Resumen del sistema">
+          <article class="stat-card">
+            <div class="stat-top">
+              <span>Total de alojamientos</span
+              ><span class="stat-icon green" aria-hidden="true">⌂</span>
+            </div>
+            <strong class="stat-value" id="stat-listings">—</strong>
+            <span class="stat-caption"
+              ><span class="tiny-dot green-dot"></span>En tu catálogo</span
+            >
+          </article>
+          <article class="stat-card">
+            <div class="stat-top">
+              <span>Reservas recibidas</span
+              ><span class="stat-icon blue" aria-hidden="true">▤</span>
+            </div>
+            <strong class="stat-value" id="stat-bookings">—</strong>
+            <span class="stat-caption"
+              ><span class="tiny-dot blue-dot"></span>Solicitudes
+              registradas</span
+            >
+          </article>
+          <article class="stat-card">
+            <div class="stat-top">
+              <span>Eventos registrados</span
+              ><span class="stat-icon lilac" aria-hidden="true">⌁</span>
+            </div>
+            <strong class="stat-value" id="stat-events">—</strong>
+            <span class="stat-caption"
+              ><span class="tiny-dot lilac-dot"></span>Actividad EDA</span
+            >
+          </article>
+          <article class="stat-card">
+            <div class="stat-top">
+              <span>Ingresos potenciales</span
+              ><span class="stat-icon amber" aria-hidden="true">$</span>
+            </div>
+            <strong class="stat-value" id="stat-revenue">—</strong>
+            <span class="stat-caption"
+              ><span class="tiny-dot amber-dot"></span>Reservas no
+              canceladas</span
+            >
+          </article>
+        </section>
+
+        <section class="data-section" id="stays" aria-labelledby="stays-title">
+          <div class="section-heading">
+            <div class="section-title-group">
+              <div class="section-icon green" aria-hidden="true">⌂</div>
+              <div>
+                <h2 id="stays-title">Alojamientos</h2>
+                <p>Administra las propiedades visibles en tu marketplace.</p>
+              </div>
+            </div>
+            <div class="table-tools">
+              <label class="table-search">
+                <span aria-hidden="true">⌕</span>
+                <input
+                  id="listing-search"
+                  type="search"
+                  placeholder="Buscar alojamiento..."
+                  aria-label="Buscar alojamiento"
+                />
+              </label>
+              <button
+                class="button button-light"
+                id="refresh-button"
+                type="button"
+              >
+                <span aria-hidden="true">↻</span> Actualizar
+              </button>
+              <button
+                class="button button-primary desktop-add"
+                id="add-listing-button-top"
+                type="button"
+              >
+                <span aria-hidden="true">＋</span> Agregar
+              </button>
+            </div>
+          </div>
+          <div class="table-shell">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th scope="col">ALOJAMIENTO</th>
+                  <th scope="col">TIPO</th>
+                  <th scope="col">UBICACIÓN</th>
+                  <th scope="col">PRECIO / NOCHE</th>
+                  <th scope="col">CAPACIDAD</th>
+                  <th scope="col">ESTADO</th>
+                  <th scope="col"><span class="sr-only">Acciones</span></th>
+                </tr>
+              </thead>
+              <tbody id="listing-table-body">
+                <tr>
+                  <td colspan="7" class="loading-cell">
+                    Cargando alojamientos…
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="table-footer">
+              <span id="listing-table-count" aria-live="polite"
+                >Cargando registros…</span
+              ><span class="table-foot-note"
+                >Datos sincronizados con Supabase</span
+              >
+            </div>
+          </div>
+          <div
+            class="inline-error"
+            id="listing-error"
+            role="alert"
+            hidden
+          ></div>
+        </section>
+
+        <section
+          class="data-section"
+          id="bookings"
+          aria-labelledby="bookings-title"
+        >
+          <div class="section-heading">
+            <div class="section-title-group">
+              <div class="section-icon blue" aria-hidden="true">▤</div>
+              <div>
+                <h2 id="bookings-title">Reservas recibidas</h2>
+                <p>Seguimiento de solicitudes y estado de cada huésped.</p>
+              </div>
+            </div>
+            <button
+              class="button button-light"
+              id="refresh-bookings"
+              type="button"
+            >
+              <span aria-hidden="true">↻</span> Actualizar
+            </button>
+          </div>
+          <div class="table-shell">
+            <table class="data-table booking-table">
+              <thead>
+                <tr>
+                  <th scope="col">HUÉSPED</th>
+                  <th scope="col">ALOJAMIENTO</th>
+                  <th scope="col">ESTANCIA</th>
+                  <th scope="col">TOTAL</th>
+                  <th scope="col">ESTADO</th>
+                  <th scope="col">RECIBIDA</th>
+                </tr>
+              </thead>
+              <tbody id="booking-table-body">
+                <tr>
+                  <td colspan="6" class="loading-cell">Cargando reservas…</td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="table-footer">
+              <span id="booking-table-count" aria-live="polite"
+                >Consultando reservas…</span
+              ><span class="table-foot-note">Actualizado desde la API</span>
+            </div>
+          </div>
+          <div
+            class="inline-error"
+            id="booking-error"
+            role="alert"
+            hidden
+          ></div>
+        </section>
+
+        <section
+          class="data-section events-section"
+          id="events"
+          aria-labelledby="events-title"
+        >
+          <div class="section-heading">
+            <div class="section-title-group">
+              <div class="section-icon lilac" aria-hidden="true">⌁</div>
+              <div>
+                <h2 id="events-title">Eventos registrados</h2>
+                <p>
+                  Registro de actividad preparado para la arquitectura orientada
+                  a eventos.
+                </p>
+              </div>
+            </div>
+            <button
+              class="button button-light"
+              id="refresh-events"
+              type="button"
+            >
+              <span aria-hidden="true">↻</span> Actualizar
+            </button>
+          </div>
+          <div class="events-intro">
+            <span class="event-pulse" aria-hidden="true"><span></span></span>
+            <span
+              ><strong>Registro de eventos activo</strong
+              ><small
+                >Los eventos de dominio se almacenan en
+                <code>eventos_log</code>.</small
+              ></span
+            >
+            <span class="event-count-pill" id="event-count-pill"
+              >— eventos</span
+            >
+          </div>
+          <div class="table-shell">
+            <table class="data-table event-table">
+              <thead>
+                <tr>
+                  <th scope="col">TIPO DE EVENTO</th>
+                  <th scope="col">PAYLOAD</th>
+                  <th scope="col">FECHA Y HORA</th>
+                </tr>
+              </thead>
+              <tbody id="event-table-body">
+                <tr>
+                  <td colspan="3" class="loading-cell">Cargando eventos…</td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="table-footer">
+              <span id="event-table-count" aria-live="polite"
+                >Consultando registro…</span
+              ><span class="table-foot-note">Últimos 50 eventos</span>
+            </div>
+          </div>
+          <div class="inline-error" id="event-error" role="alert" hidden></div>
+        </section>
+        <footer class="app-footer">
+          <span>Estadía · Panel de administración</span
+          ><span>Datos de gestión servidos por Supabase</span>
+        </footer>
+      </main>
+    </div>
+
+    <dialog
+      class="modal"
+      id="listing-modal"
+      aria-labelledby="listing-modal-title"
+    >
+      <form id="listing-form" class="modal-form">
+        <div class="modal-header">
+          <div>
+            <span class="modal-eyebrow">CATÁLOGO DE PROPIEDADES</span>
+            <h2 id="listing-modal-title">Agregar alojamiento</h2>
+            <p>Completa los datos para publicar una estancia.</p>
+          </div>
+          <button
+            class="icon-close"
+            type="button"
+            data-close="listing-modal"
+            aria-label="Cerrar formulario"
+          >
+            ×
+          </button>
+        </div>
+        <input type="hidden" name="id" />
+        <div class="form-grid">
+          <label class="form-field full-field"
+            >Proveedor UUID <span class="required">*</span>
+            <input
+              name="proveedorId"
+              type="text"
+              required
+              pattern="[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}"
+              placeholder="UUID del proveedor"
+            />
+          </label>
+          <label class="form-field full-field"
+            >Nombre del alojamiento <span class="required">*</span>
+            <input
+              name="nombre"
+              type="text"
+              required
+              minlength="3"
+              maxlength="160"
+              placeholder="Ej. Suite Familiar Quito"
+              autocomplete="off"
+            />
+          </label>
+          <label class="form-field"
+            >Tipo <span class="required">*</span>
+            <select name="tipo" required>
+              <option value="" disabled selected>Selecciona un tipo</option>
+              <option value="hotel">Hotel</option>
+              <option value="departamento">Departamento</option>
+              <option value="villa">Villa</option>
+            </select>
+          </label>
+          <label class="form-field"
+            >Ciudad <span class="required">*</span>
+            <input
+              name="ciudad"
+              type="text"
+              required
+              minlength="3"
+              maxlength="120"
+              placeholder="Ej. Quito"
+              autocomplete="address-level2"
+            />
+          </label>
+          <label class="form-field"
+            >Dirección <span class="required">*</span>
+            <input
+              name="direccion"
+              type="text"
+              required
+              maxlength="240"
+              placeholder="Dirección completa"
+            />
+          </label>
+          <label class="form-field"
+            >Latitud <span class="required">*</span>
+            <input
+              name="latitud"
+              type="number"
+              required
+              min="-90"
+              max="90"
+              step="any"
+              placeholder="-0.2202"
+            />
+          </label>
+          <label class="form-field"
+            >Longitud <span class="required">*</span>
+            <input
+              name="longitud"
+              type="number"
+              required
+              min="-180"
+              max="180"
+              step="any"
+              placeholder="-78.5123"
+            />
+          </label>
+          <label class="form-field"
+            >Precio base por noche <span class="required">*</span>
+            <span class="input-prefix"
+              ><span>$</span
+              ><input
+                name="precioBaseNoche"
+                type="number"
+                required
+                min="0"
+                max="9999999999"
+                step="0.01"
+                inputmode="decimal"
+                placeholder="0.00"
+            /></span>
+          </label>
+          <label class="form-field"
+            >Moneda <span class="required">*</span>
+            <input
+              name="moneda"
+              type="text"
+              required
+              pattern="[A-Z]{3}"
+              maxlength="3"
+              value="USD"
+            />
+          </label>
+          <label class="form-field"
+            >Capacidad máxima <span class="required">*</span>
+            <input
+              name="capacidadMaxima"
+              type="number"
+              required
+              min="1"
+              max="1000"
+              step="1"
+              inputmode="numeric"
+              placeholder="Ej. 4"
+            />
+          </label>
+          <label class="form-field"
+            >Habitaciones disponibles <span class="required">*</span>
+            <input
+              name="habitacionesDisponibles"
+              type="number"
+              required
+              min="0"
+              max="1000"
+              step="1"
+              value="1"
+            />
+          </label>
+          <label class="form-field full-field"
+            >URLs de imágenes <span class="required">*</span>
+            <input
+              name="imagenes"
+              type="text"
+              required
+              maxlength="2048"
+              placeholder="https://... (separa múltiples URL con comas)"
+            />
+            <small
+              >Usa enlaces públicos directos a imágenes, separados por
+              comas.</small
+            >
+          </label>
+          <label class="form-field full-field"
+            >Servicios <span class="optional-label">Separados por comas</span>
+            <input
+              name="servicios"
+              type="text"
+              maxlength="1000"
+              placeholder="wifi, desayuno, estacionamiento"
+            />
+          </label>
+          <label class="form-field full-field"
+            >Descripción <span class="optional-label">Opcional</span>
+            <textarea
+              name="descripcion"
+              rows="3"
+              maxlength="2000"
+              placeholder="Describe lo que hace especial a este alojamiento…"
+            ></textarea>
+          </label>
+          <label class="form-field full-field"
+            >Política de cancelación
+            <span class="optional-label">Opcional</span>
+            <textarea
+              name="politicaCancelacion"
+              rows="2"
+              maxlength="2000"
+              placeholder="Condiciones de cancelación…"
+            ></textarea>
+          </label>
+        </div>
+        <div class="modal-error" id="form-error" role="alert" hidden></div>
+        <div class="modal-actions">
+          <button
+            class="button button-light"
+            type="button"
+            data-close="listing-modal"
+          >
+            Cancelar</button
+          ><button
+            class="button button-primary"
+            id="save-listing-button"
+            type="submit"
+          >
+            Guardar alojamiento
+          </button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog
+      class="confirm-dialog"
+      id="delete-dialog"
+      aria-labelledby="delete-title"
+    >
+      <div class="confirm-content">
+        <button
+          class="icon-close"
+          type="button"
+          data-close="delete-dialog"
+          aria-label="Cerrar confirmación"
+        >
+          ×
+        </button>
+        <span class="confirm-icon" aria-hidden="true">!</span>
+        <h2 id="delete-title">¿Eliminar alojamiento?</h2>
+        <p id="delete-description">Esta acción no se puede deshacer.</p>
+        <div class="confirm-actions">
+          <button
+            class="button button-light"
+            type="button"
+            data-close="delete-dialog"
+          >
+            Cancelar</button
+          ><button
+            class="button button-danger"
+            id="confirm-delete-button"
+            type="button"
+          >
+            Sí, eliminar
+          </button>
+        </div>
+        <div class="modal-error" id="delete-error" role="alert" hidden></div>
+      </div>
+    </dialog>
+    <div
+      class="toast"
+      id="admin-toast"
+      role="status"
+      aria-live="polite"
+      hidden
+    ></div>
+  </body>
+</html>

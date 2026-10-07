@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Encuentra y reserva alojamientos únicos en Ecuador."
+    />
+    <meta name="theme-color" content="#f8f7f4" />
+    <title>Estadía — Encuentra tu próximo alojamiento</title>
+    <link rel="preconnect" href="https://images.unsplash.com" />
+    <link rel="stylesheet" href="/marketplace/styles.css" />
+    <script src="/marketplace/app.js" defer></script>
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="/marketplace/" aria-label="Estadía, inicio">
+        <span class="brand-mark" aria-hidden="true">e</span>
+        <span>estadía</span>
+      </a>
+      <nav class="header-nav" aria-label="Navegación principal">
+        <a href="#alojamientos">Explorar estancias</a>
+        <a class="host-link" href="/admin/">Modo Administración</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <span class="eyebrow"
+            ><span class="eyebrow-dot"></span> TU PRÓXIMA HISTORIA EMPIEZA
+            AQUÍ</span
+          >
+          <h1 id="hero-title">Encuentra tu próximo <em>alojamiento</em></h1>
+          <p>Escapadas con encanto, lugares que se sienten como tuyos.</p>
+        </div>
+        <form class="search-panel" id="search-form" role="search">
+          <label class="search-field">
+            <span class="field-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none">
+                <path d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z" />
+                <circle cx="12" cy="10" r="2.5" />
+              </svg>
+            </span>
+            <span class="search-label">¿A qué ciudad?</span>
+            <input
+              id="location-filter"
+              name="ciudad"
+              type="search"
+              placeholder="Ciudad o destino"
+              autocomplete="off"
+            />
+          </label>
+          <span class="search-divider" aria-hidden="true"></span>
+          <label class="search-field price-field">
+            <span class="field-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none">
+                <path
+                  d="M12 2v20M17 6.5c0-1.7-2-3-5-3S7 4.7 7 6.5 9 9 12 9s5 1.3 5 3.5-2 4-5 4-5-1.3-5-3"
+                />
+              </svg>
+            </span>
+            <span class="search-label">Precio por noche</span>
+            <span class="price-input-wrap">
+              <span aria-hidden="true">$</span>
+              <input
+                id="price-filter"
+                name="precio_maximo"
+                type="number"
+                min="0"
+                step="1"
+                placeholder="Sin límite"
+                inputmode="decimal"
+              />
+            </span>
+          </label>
+          <button class="search-button" type="submit">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <circle cx="10.8" cy="10.8" r="6.8" />
+              <path d="m16 16 5 5" />
+            </svg>
+            <span>Buscar</span>
+          </button>
+        </form>
+        <div class="hero-note">
+          <span aria-hidden="true">✳</span> Lugares especiales, anfitriones
+          locales, recuerdos inolvidables.
+        </div>
+      </section>
+
+      <section
+        class="catalog section-wrap"
+        id="alojamientos"
+        aria-labelledby="catalog-title"
+      >
+        <div class="catalog-heading">
+          <div>
+            <span class="eyebrow section-eyebrow">SELECCIÓN PARA TI</span>
+            <h2 id="catalog-title">Estancias que inspiran</h2>
+            <p id="result-count" class="result-count" aria-live="polite">
+              Descubriendo lugares...
+            </p>
+          </div>
+          <button class="clear-button" id="clear-filters" type="button" hidden>
+            Limpiar filtros <span aria-hidden="true">×</span>
+          </button>
+        </div>
+
+        <div
+          id="status-message"
+          class="status-message"
+          role="status"
+          aria-live="polite"
+          hidden
+        ></div>
+        <div id="listing-grid" class="listing-grid" aria-busy="true"></div>
+      </section>
+      <section class="closing-note" aria-label="Inspiración">
+        <span aria-hidden="true">✳</span>
+        <p>El mejor viaje empieza con el lugar perfecto.</p>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <a class="brand footer-brand" href="/marketplace/"
+        ><span class="brand-mark" aria-hidden="true">e</span
+        ><span>estadía</span></a
+      >
+      <span>Viaja a tu manera. © 2026 Estadía</span>
+      <a href="/api/docs">Información de la plataforma</a>
+    </footer>
+
+    <dialog
+      id="detail-dialog"
+      class="detail-dialog"
+      aria-labelledby="detail-title"
+    >
+      <button class="dialog-close" type="button" aria-label="Cerrar detalles">
+        ×
+      </button>
+      <div class="dialog-content" id="dialog-content"></div>
+    </dialog>
+    <dialog
+      id="success-dialog"
+      class="success-dialog"
+      aria-labelledby="success-title"
+    >
+      <button
+        class="dialog-close success-close"
+        type="button"
+        aria-label="Cerrar confirmación"
+      >
+        ×
+      </button>
+      <div class="success-icon" aria-hidden="true">
+        <svg viewBox="0 0 48 48" fill="none">
+          <path d="m13 24 7.5 7.5L36 16" />
+        </svg>
+      </div>
+      <span class="eyebrow section-eyebrow">¡TODO LISTO!</span>
+      <h2 id="success-title">¡Reserva creada con éxito!</h2>
+      <p id="success-message">Tu próxima aventura ya está un paso más cerca.</p>
+      <button class="primary-button success-done" type="button">
+        Seguir explorando
+      </button>
+    </dialog>
+    <div
+      id="toast"
+      class="toast"
+      role="alert"
+      aria-live="assertive"
+      hidden
+    ></div>
+  </body>
+</html>

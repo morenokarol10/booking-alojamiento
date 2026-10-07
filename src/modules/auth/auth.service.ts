@@ -62,6 +62,11 @@ export class AuthService {
       email: dto.email,
       password: dto.password,
     });
+    if (error?.code === 'email_not_confirmed') {
+      throw new UnauthorizedException(
+        'La cuenta existe, pero el correo aún no está confirmado. Revisa tu bandeja de entrada o solicita recuperar la contraseña.',
+      );
+    }
     if (error || !data.user || !data.session) {
       throw new UnauthorizedException('Correo o contraseña incorrectos.');
     }

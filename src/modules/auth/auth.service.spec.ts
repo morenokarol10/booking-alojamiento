@@ -2,6 +2,27 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { AuthService } from './auth.service';
 
 describe('AuthService', () => {
+  it('explains when login fails because the email is not confirmed', async () => {
+    const signInWithPassword = jest.fn().mockResolvedValue({
+      data: { user: null, session: null },
+      error: {
+        code: 'email_not_confirmed',
+        message: 'Email not confirmed',
+      },
+    });
+    const supabase = {
+      auth: { signInWithPassword },
+    } as unknown as SupabaseClient;
+    const service = new AuthService(supabase);
+
+    await expect(
+      service.login({
+        email: 'cliente@example.com',
+        password: 'ClienteSeguro123!',
+      }),
+    ).rejects.toThrow(/correo aún no está confirmado/i);
+  });
+
   it('reports email confirmation when Supabase creates an unconfirmed account', async () => {
     const user = {
       id: '50000000-0000-4000-8000-000000000001',

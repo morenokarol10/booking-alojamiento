@@ -39,6 +39,31 @@ describe('alojamiento mapper', () => {
     });
   });
 
+  it('normalizes comma-separated lists and numeric values for Supabase', () => {
+    const dto = {
+      proveedorId: '20000000-0000-4000-8000-000000000001',
+      nombre: 'Suite Quito',
+      tipo: 'hotel' as const,
+      ciudad: 'Quito',
+      direccion: 'Centro Histórico',
+      coordenadas: { latitud: '-0.22', longitud: '-78.51' },
+      precioBaseNoche: '85.50',
+      capacidadMaxima: '4',
+      habitacionesDisponibles: '2',
+      servicios: 'WiFi, Desayuno incluido, ',
+      imagenes: 'https://example.com/one.jpg, https://example.com/two.jpg',
+    } as unknown as CreateAlojamientoDto;
+
+    expect(toAlojamientoDatabase(dto)).toMatchObject({
+      coordenadas: { latitud: -0.22, longitud: -78.51 },
+      precio_base_noche: 85.5,
+      capacidad_maxima: 4,
+      habitaciones_disponibles: 2,
+      servicios: ['WiFi', 'Desayuno incluido'],
+      imagenes: ['https://example.com/one.jpg', 'https://example.com/two.jpg'],
+    });
+  });
+
   it('maps persisted fields back to the camelCase API entity', () => {
     const entity = toAlojamientoEntity({
       id: '10000000-0000-4000-8000-000000000001',

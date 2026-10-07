@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayMinSize,
   IsArray,
@@ -105,6 +105,7 @@ export class CreateAlojamientoDto {
   habitacionesDisponibles!: number;
 
   @ApiPropertyOptional({ type: [String], example: ['wifi', 'desayuno'] })
+  @Transform(({ value }) => normalizeStringArray(value))
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
@@ -122,8 +123,33 @@ export class CreateAlojamientoDto {
     type: [String],
     example: ['https://images.unsplash.com/photo-example'],
   })
+  @Transform(({ value }) => normalizeStringArray(value))
   @IsArray()
   @ArrayMinSize(1)
   @IsUrl({ require_protocol: true }, { each: true })
   imagenes!: string[];
+}
+
+function normalizeStringArray(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => (typeof item === 'string' ? item.trim() : item))
+      .filter((item) => item !== '');
+  }
+  if (typeof value !== 'string') return value;
+
+  const trimmedValue = value.trim();
+  if (trimmedValue.startsWith('[')) {
+    try {
+      const parsed: unknown = JSON.parse(trimmedValue);
+      if (Array.isArray(parsed)) return normalizeStringArray(parsed);
+    } catch {
+      // Fall through to comma-separated input; DTO validation reports invalid items.
+    }
+  }
+
+  return trimmedValue
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
 }

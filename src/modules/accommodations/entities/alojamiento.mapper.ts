@@ -1,4 +1,7 @@
-import { InternalServerErrorException } from '@nestjs/common';
+import {
+  BadRequestException,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import type {
   AlojamientoEntity,
   CoordenadasEntity,
@@ -23,25 +26,38 @@ export function toAlojamientoDatabase(
   if (dto.direccion !== undefined) record.direccion = dto.direccion;
   if (dto.coordenadas !== undefined) {
     record.coordenadas = {
-      latitud: dto.coordenadas.latitud,
-      longitud: dto.coordenadas.longitud,
+      latitud: toFiniteNumber(dto.coordenadas.latitud, 'coordenadas.latitud'),
+      longitud: toFiniteNumber(
+        dto.coordenadas.longitud,
+        'coordenadas.longitud',
+      ),
     };
   }
   if (dto.precioBaseNoche !== undefined) {
-    record.precio_base_noche = dto.precioBaseNoche;
+    record.precio_base_noche = toFiniteNumber(
+      dto.precioBaseNoche,
+      'precioBaseNoche',
+    );
   }
   if (dto.moneda !== undefined) record.moneda = dto.moneda;
   if (dto.capacidadMaxima !== undefined) {
-    record.capacidad_maxima = dto.capacidadMaxima;
+    record.capacidad_maxima = toInteger(dto.capacidadMaxima, 'capacidadMaxima');
   }
   if (dto.habitacionesDisponibles !== undefined) {
-    record.habitaciones_disponibles = dto.habitacionesDisponibles;
+    record.habitaciones_disponibles = toInteger(
+      dto.habitacionesDisponibles,
+      'habitacionesDisponibles',
+    );
   }
-  if (dto.servicios !== undefined) record.servicios = dto.servicios;
+  if (dto.servicios !== undefined) {
+    record.servicios = toStringArray(dto.servicios, 'servicios');
+  }
   if (dto.politicaCancelacion !== undefined) {
     record.politica_cancelacion = dto.politicaCancelacion;
   }
-  if (dto.imagenes !== undefined) record.imagenes = dto.imagenes;
+  if (dto.imagenes !== undefined) {
+    record.imagenes = toStringArray(dto.imagenes, 'imagenes');
+  }
   return record;
 }
 
@@ -139,6 +155,50 @@ function requireNumber(value: unknown, field: string): number {
     );
   }
   return numberValue;
+}
+
+function toFiniteNumber(value: unknown, field: string): number {
+  const parsed = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(parsed)) {
+    throw new BadRequestException(`${field} debe ser un número válido.`);
+  }
+  return parsed;
+}
+
+function toInteger(value: unknown, field: string): number {
+  const parsed = toFiniteNumber(value, field);
+  if (!Number.isInteger(parsed)) {
+    throw new BadRequestException(`${field} debe ser un número entero.`);
+  }
+  return parsed;
+}
+
+function toStringArray(value: unknown, field: string): string[] {
+  let items: unknown = value;
+  if (typeof value === 'string') {
+    const trimmedValue = value.trim();
+    if (trimmedValue.startsWith('[')) {
+      try {
+        items = JSON.parse(trimmedValue);
+      } catch {
+        items = trimmedValue;
+      }
+    }
+    if (typeof items === 'string') {
+      items = items
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean);
+    }
+  }
+
+  if (
+    !Array.isArray(items) ||
+    !items.every((item) => typeof item === 'string')
+  ) {
+    throw new BadRequestException(`${field} debe ser un arreglo de textos.`);
+  }
+  return items.map((item: string) => item.trim()).filter(Boolean);
 }
 
 function stringArray(value: unknown, field: string): string[] {

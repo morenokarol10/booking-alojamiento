@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  HttpException,
   Inject,
   Injectable,
   InternalServerErrorException,
@@ -78,18 +79,39 @@ export class AccommodationsService {
   }
 
   async create(dto: CreateAlojamientoDto) {
-    const { data, error } = await this.supabase
-      .from(this.table)
-      .insert(toAlojamientoDatabase(dto))
-      .select('*')
-      .single();
+    let data: Record<string, unknown>;
+    try {
+      const result = await this.supabase
+        .from(this.table)
+        .insert(toAlojamientoDatabase(dto))
+        .select('*')
+        .single();
 
-    if (error) {
-      throw new InternalServerErrorException({
-        statusCode: 500,
-        message: 'No se pudo crear el alojamiento.',
-        error: error.message,
-      });
+      if (result.error) {
+        console.error('Supabase create alojamiento error:', result.error);
+        const message = `No se pudo crear el alojamiento: ${result.error.message}`;
+        if (
+          result.error.code?.startsWith('22') ||
+          result.error.code?.startsWith('23')
+        ) {
+          throw new BadRequestException(message);
+        }
+        throw new InternalServerErrorException(message);
+      }
+      if (!result.data) {
+        throw new InternalServerErrorException(
+          'Supabase no devolvió el alojamiento creado.',
+        );
+      }
+      data = result.data;
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      console.error('Unexpected error creating alojamiento:', error);
+      const details =
+        error instanceof Error ? error.message : 'Error desconocido.';
+      throw new InternalServerErrorException(
+        `No se pudo crear el alojamiento: ${details}`,
+      );
     }
 
     return {

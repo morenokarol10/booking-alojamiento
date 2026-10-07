@@ -22,6 +22,9 @@
       </a>
       <nav class="header-nav" aria-label="Navegación principal">
         <a href="#alojamientos">Explorar estancias</a>
+        <a class="host-link" id="my-bookings-link" href="#mis-reservas" hidden
+          >Mis reservas</a
+        >
         <a class="host-link" id="admin-mode-link" href="/admin/" hidden
           >Modo Administración</a
         >
@@ -163,11 +166,38 @@
         </svg>
       </div>
       <span class="eyebrow section-eyebrow">¡TODO LISTO!</span>
-      <h2 id="success-title">¡Reserva creada con éxito!</h2>
+      <h2 id="success-title">¡Reserva realizada con éxito!</h2>
       <p id="success-message">Tu próxima aventura ya está un paso más cerca.</p>
       <button class="primary-button success-done" type="button">
-        Seguir explorando
+        Explorar otro alojamiento
       </button>
+    </dialog>
+    <dialog
+      id="my-bookings-dialog"
+      class="bookings-dialog"
+      aria-labelledby="my-bookings-title"
+    >
+      <button
+        class="dialog-close"
+        type="button"
+        aria-label="Cerrar mis reservas"
+      >
+        ×
+      </button>
+      <div class="bookings-dialog-content">
+        <span class="eyebrow section-eyebrow">TU CUENTA</span>
+        <h2 id="my-bookings-title">Mis reservas</h2>
+        <p class="bookings-intro">
+          Consulta las reservas realizadas con tu cuenta.
+        </p>
+        <p
+          class="bookings-status"
+          id="my-bookings-status"
+          role="status"
+          aria-live="polite"
+        ></p>
+        <div class="my-bookings-list" id="my-bookings-list"></div>
+      </div>
     </dialog>
     <div
       id="toast"

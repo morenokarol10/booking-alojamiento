@@ -157,6 +157,27 @@ export class ReservationsService {
     };
   }
 
+  async findMine(user: AuthenticatedUser) {
+    const { data, error } = await this.supabase
+      .from('reservas')
+      .select('*, alojamientos (id, nombre, ciudad)')
+      .eq('cliente_id', user.id)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      throw new InternalServerErrorException({
+        statusCode: 500,
+        message: 'No se pudieron consultar tus reservas.',
+        error: error.message,
+      });
+    }
+
+    return {
+      data: data.map((row: Record<string, unknown>) => toReservaEntity(row)),
+      message: 'Tus reservas fueron consultadas correctamente.',
+    };
+  }
+
   private getNights(start: string, end: string): number {
     const startTime = Date.parse(`${start}T00:00:00Z`);
     const endTime = Date.parse(`${end}T00:00:00Z`);

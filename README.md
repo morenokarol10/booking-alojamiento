@@ -124,6 +124,8 @@ La protección efectiva no depende solo de la interfaz:
 - `POST`, `PUT` y `DELETE /api/v1/alojamientos` requieren el rol `admin`.
 - `GET /api/v1/admin/eventos` requiere `admin`.
 - `GET /api/v1/reservas` requiere `admin`.
+- `GET /api/v1/reservas/mis-reservas` requiere `cliente` y filtra por el ID del
+  usuario autenticado.
 - El rol se deriva del `app_metadata.role` retornado por Supabase Auth tras
   validar el Bearer token; un valor de `user_metadata` no concede privilegios.
 - Las rutas protegidas responden 401 si falta o no sirve el token y 403 si el
@@ -150,6 +152,22 @@ El valor de contraseña no se incorpora a código ni al README como secreto. El
 script actualiza la contraseña cada vez que se ejecuta. **No uses la clave de
 prueba en producción**; usa una contraseña única y cámbiala antes de publicar.
 
+#### Carga de alojamientos de prueba
+
+[scripts/seed-alojamientos.mjs](./scripts/seed-alojamientos.mjs) carga diez
+alojamientos en Quito, Cuenca, Guayaquil, Baños de Agua Santa, Mindo,
+Montañita y Puerto Ayora, con precios USD, coordenadas, servicios e imágenes.
+Usa UUIDs estables y `upsert`, así que puede repetirse sin duplicar las
+propiedades sembradas:
+
+```powershell
+npm run seed:alojamientos
+```
+
+Configura `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY` en `.env` o en el entorno.
+El script no se ejecuta automáticamente al iniciar el backend ni al desplegar.
+Mantén la service-role key fuera del cliente y de Git.
+
 ### 3.3 Marketplace Web
 
 La interfaz estática se sirve desde [public/](./public/) bajo
@@ -162,11 +180,19 @@ La interfaz estática se sirve desde [public/](./public/) bajo
 - Calcular en el navegador un estimado por noches y enviar la reserva a
   `POST /api/v1/reservas`.
 - Iniciar sesión o registrarse como cliente para reservar.
+- Consultar el historial personal desde **Mis reservas**; el endpoint
+  `GET /api/v1/reservas/mis-reservas` filtra las filas por el usuario asociado
+  al JWT validado.
 
 El backend vuelve a validar fechas, capacidad y disponibilidad, y calcula el
 total a partir del precio guardado, en vez de confiar en el importe calculado
 por el navegador. El resultado de pago es **simulado**; no se contacta ni se
 cobra a una pasarela financiera.
+
+Un cliente autenticado puede reservar varios alojamientos o fechas: no hay una
+restricción de una sola reserva por usuario. Tras cada POST exitoso, el
+Marketplace cierra y limpia el formulario, muestra **“¡Reserva realizada con
+éxito!”** y permite continuar explorando o consultar el historial.
 
 ### 3.4 APIs y Documentación Swagger/OpenAPI
 
@@ -177,19 +203,20 @@ esquema Bearer `supabase-jwt`.
 
 #### Endpoints del prototipo
 
-| Método   | Ruta                       | Acceso                                    |
-| :------- | :------------------------- | :---------------------------------------- |
-| `POST`   | `/api/v1/auth/register`    | Público; crea exclusivamente clientes     |
-| `POST`   | `/api/v1/auth/login`       | Público                                   |
-| `GET`    | `/api/v1/auth/me`          | JWT válido                                |
-| `GET`    | `/api/v1/alojamientos`     | Público; filtros `ciudad`, `precioMaximo` |
-| `GET`    | `/api/v1/alojamientos/:id` | Público                                   |
-| `POST`   | `/api/v1/alojamientos`     | Solo `admin`                              |
-| `PUT`    | `/api/v1/alojamientos/:id` | Solo `admin`                              |
-| `DELETE` | `/api/v1/alojamientos/:id` | Solo `admin`                              |
-| `POST`   | `/api/v1/reservas`         | Solo `cliente` autenticado                |
-| `GET`    | `/api/v1/reservas`         | Solo `admin`                              |
-| `GET`    | `/api/v1/admin/eventos`    | Solo `admin`                              |
+| Método   | Ruta                            | Acceso                                    |
+| :------- | :------------------------------ | :---------------------------------------- |
+| `POST`   | `/api/v1/auth/register`         | Público; crea exclusivamente clientes     |
+| `POST`   | `/api/v1/auth/login`            | Público                                   |
+| `GET`    | `/api/v1/auth/me`               | JWT válido                                |
+| `GET`    | `/api/v1/alojamientos`          | Público; filtros `ciudad`, `precioMaximo` |
+| `GET`    | `/api/v1/alojamientos/:id`      | Público                                   |
+| `POST`   | `/api/v1/alojamientos`          | Solo `admin`                              |
+| `PUT`    | `/api/v1/alojamientos/:id`      | Solo `admin`                              |
+| `DELETE` | `/api/v1/alojamientos/:id`      | Solo `admin`                              |
+| `POST`   | `/api/v1/reservas`              | Solo `cliente` autenticado                |
+| `GET`    | `/api/v1/reservas/mis-reservas` | Solo `cliente`; filtra por su JWT         |
+| `GET`    | `/api/v1/reservas`              | Solo `admin`                              |
+| `GET`    | `/api/v1/admin/eventos`         | Solo `admin`                              |
 
 #### Contrato de la materia frente a la API implementada
 

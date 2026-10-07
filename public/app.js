@@ -24,6 +24,9 @@ const detailDialog = document.querySelector('#detail-dialog');
 const dialogContent = document.querySelector('#dialog-content');
 const successDialog = document.querySelector('#success-dialog');
 const successMessage = document.querySelector('#success-message');
+const myBookingsDialog = document.querySelector('#my-bookings-dialog');
+const myBookingsList = document.querySelector('#my-bookings-list');
+const myBookingsStatus = document.querySelector('#my-bookings-status');
 const toast = document.querySelector('#toast');
 let toastTimeout;
 let currentListings = [];
@@ -251,6 +254,74 @@ function showToast(message) {
   }, 6000);
 }
 
+function formatDate(value) {
+  if (!value) return 'Fecha no disponible';
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(value)
+    ? new Date(`${value}T12:00:00Z`)
+    : new Date(value);
+  if (Number.isNaN(date.getTime())) return escapeHtml(value);
+  return new Intl.DateTimeFormat('es-EC', { dateStyle: 'medium' }).format(date);
+}
+
+async function loadMyBookings() {
+  const token = window.BookingAuth.token();
+  if (!token) {
+    window.BookingAuth.goToLogin('/marketplace/');
+    return;
+  }
+
+  myBookingsStatus.textContent = 'Cargando tus reservas…';
+  myBookingsList.replaceChildren();
+  try {
+    const response = await fetch(`${API_BASE}/reservas/mis-reservas`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (response.status === 401) {
+      window.BookingAuth.clearSession();
+      myBookingsDialog.close();
+      window.BookingAuth.goToLogin('/marketplace/');
+      return;
+    }
+    const body = await readResponse(response);
+    const bookings = Array.isArray(body?.data) ? body.data : null;
+    if (!bookings) {
+      throw new Error('La API devolvió una lista de reservas no válida.');
+    }
+    if (!bookings.length) {
+      myBookingsStatus.textContent =
+        'Aún no tienes reservas. Explora el catálogo para planificar tu viaje.';
+      return;
+    }
+
+    myBookingsStatus.textContent = `${bookings.length} ${
+      bookings.length === 1 ? 'reserva' : 'reservas'
+    }`;
+    myBookingsList.innerHTML = bookings
+      .map((booking) => {
+        const accommodation = booking.alojamiento?.nombre || 'Alojamiento';
+        const location = booking.alojamiento?.ciudad || '';
+        const currency = booking.moneda || 'USD';
+        const status = booking.estado || 'pendiente';
+        return `
+          <article class="my-booking-card">
+            <div class="my-booking-heading">
+              <div>
+                <h3>${escapeHtml(accommodation)}</h3>
+                <p>${escapeHtml(location)}</p>
+              </div>
+              <span class="my-booking-status status-${escapeHtml(status)}">${escapeHtml(status)}</span>
+            </div>
+            <p class="my-booking-dates">${formatDate(booking.fechaCheckin)} – ${formatDate(booking.fechaCheckout)}</p>
+            <strong>${formatMoney(booking.precioTotal, currency)}</strong>
+          </article>`;
+      })
+      .join('');
+  } catch (error) {
+    myBookingsStatus.textContent =
+      error.message || 'No se pudieron cargar tus reservas.';
+  }
+}
+
 async function submitBooking(event) {
   event.preventDefault();
   const form = event.currentTarget;
@@ -278,6 +349,7 @@ async function submitBooking(event) {
     numHuespedes: Number(formData.get('numHuespedes')),
     metodoPagoSimulado: formData.get('metodoPagoSimulado').toString(),
   };
+  const bookedAccommodation = selectedListing;
 
   try {
     const response = await fetch(`${API_BASE}/reservas`, {
@@ -295,9 +367,10 @@ async function submitBooking(event) {
     }
     const body = await readResponse(response);
     detailDialog.close();
-    successMessage.textContent = `Hemos recibido tu solicitud para ${selectedListing.nombre}. ¡Prepárate para disfrutar tu estadía!`;
-    successDialog.showModal();
+    successMessage.textContent = `Tu reserva en ${bookedAccommodation.nombre} quedó confirmada. Puedes reservar otros alojamientos o consultar todas tus reservas desde el encabezado.`;
     form.reset();
+    selectedListing = null;
+    successDialog.showModal();
   } catch (error) {
     showToast(
       error.message || 'No se pudo completar la reserva. Inténtalo de nuevo.',
@@ -310,14 +383,17 @@ async function submitBooking(event) {
 
 async function initializeMarketplace() {
   const adminLink = document.querySelector('#admin-mode-link');
+  const myBookingsLink = document.querySelector('#my-bookings-link');
   const accountLink = document.querySelector('#account-link');
   adminLink.hidden = true;
+  myBookingsLink.hidden = true;
   const token = window.BookingAuth.token();
   if (token) {
     try {
       const user = await window.BookingAuth.fetchProfile();
       if (user) {
         adminLink.hidden = user.role !== 'admin';
+        myBookingsLink.hidden = user.role !== 'cliente';
       }
       if (user) {
         accountLink.textContent = 'Cerrar sesión';
@@ -343,6 +419,14 @@ async function initializeMarketplace() {
     );
   }
 }
+
+document
+  .querySelector('#my-bookings-link')
+  .addEventListener('click', (event) => {
+    event.preventDefault();
+    myBookingsDialog.showModal();
+    void loadMyBookings();
+  });
 
 searchForm.addEventListener('submit', (event) => {
   event.preventDefault();
@@ -382,6 +466,9 @@ document.querySelectorAll('.dialog-close').forEach((button) => {
 document
   .querySelector('.success-done')
   .addEventListener('click', () => successDialog.close());
+myBookingsDialog.addEventListener('click', (event) => {
+  if (event.target === myBookingsDialog) myBookingsDialog.close();
+});
 detailDialog.addEventListener('click', (event) => {
   if (event.target === detailDialog) detailDialog.close();
 });

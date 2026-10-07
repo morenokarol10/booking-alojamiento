@@ -32,6 +32,10 @@ class QueryMock {
     return Promise.resolve(this.result);
   }
 
+  order(): Promise<QueryResult> {
+    return Promise.resolve(this.result);
+  }
+
   insert(value: unknown): this {
     this.result = this.onInsert(value);
     return this;
@@ -47,7 +51,7 @@ class QueryMock {
 }
 
 describe('ReservationsService payment and event flow', () => {
-  it('confirms simulated payment, persists camelCase request as snake_case, and writes the event', async () => {
+  it('supports multiple reservations and writes one EDA event per successful reservation', async () => {
     const inserts: Record<string, unknown[]> = {
       reservas: [],
       eventos_log: [],
@@ -165,6 +169,88 @@ describe('ReservationsService payment and event flow', () => {
         estado: 'confirmada',
       },
       pago: { estado: 'exitoso', simulado: true },
+    });
+
+    await service.create(
+      {
+        alojamientoId: accommodation.id,
+        clienteNombre: 'María Pérez',
+        clienteEmail: 'maria@example.com',
+        clienteTelefono: '+593991234567',
+        fechaCheckin: '2026-12-10',
+        fechaCheckout: '2026-12-12',
+        numHuespedes: 2,
+        metodoPagoSimulado: 'tarjeta',
+      },
+      {
+        id: '50000000-0000-4000-8000-000000000001',
+        email: 'maria@example.com',
+        role: 'cliente',
+      },
+    );
+
+    expect(inserts.reservas).toHaveLength(2);
+    expect(inserts.eventos_log).toHaveLength(2);
+  });
+
+  it('returns only reservations associated with the authenticated customer', async () => {
+    const customerId = '50000000-0000-4000-8000-000000000001';
+    const filteredIds: string[] = [];
+    const rows = [
+      {
+        id: '40000000-0000-4000-8000-000000000001',
+        alojamiento_id: '10000000-0000-4000-8000-000000000001',
+        cliente_id: customerId,
+        cliente_nombre: 'María Pérez',
+        cliente_email: 'maria@example.com',
+        cliente_telefono: '+593991234567',
+        fecha_checkin: '2026-11-10',
+        fecha_checkout: '2026-11-13',
+        num_huespedes: 2,
+        precio_total: '255.00',
+        moneda: 'USD',
+        metodo_pago_simulado: 'tarjeta',
+        pago_estado: 'exitoso',
+        pago_referencia: '30000000-0000-4000-8000-000000000001',
+        estado: 'confirmada',
+        created_at: '2026-10-07T00:00:00.000Z',
+        alojamientos: {
+          id: '10000000-0000-4000-8000-000000000001',
+          nombre: 'Suite Quito',
+          ciudad: 'Quito',
+        },
+      },
+    ];
+    const supabaseStub = {
+      from: (table: string) => {
+        expect(table).toBe('reservas');
+        return {
+          select: () => ({
+            eq: (column: string, value: string) => {
+              expect(column).toBe('cliente_id');
+              filteredIds.push(value);
+              return {
+                order: async () => ({ data: rows, error: null }),
+              };
+            },
+          }),
+        };
+      },
+    } as unknown as SupabaseClient;
+    const service = new ReservationsService(supabaseStub);
+
+    const response = await service.findMine({
+      id: customerId,
+      email: 'maria@example.com',
+      role: 'cliente',
+    });
+
+    expect(filteredIds).toEqual([customerId]);
+    expect(response.data).toHaveLength(1);
+    expect(response.data[0]).toMatchObject({
+      alojamientoId: rows[0].alojamiento_id,
+      alojamiento: { nombre: 'Suite Quito', ciudad: 'Quito' },
+      clienteNombre: 'María Pérez',
     });
   });
 });

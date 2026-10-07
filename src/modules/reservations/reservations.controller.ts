@@ -74,4 +74,24 @@ export class ReservationsController {
   findAll() {
     return this.reservationsService.findAll();
   }
+
+  @Get('mis-reservas')
+  @UseGuards(SupabaseAuthGuard, RolesGuard)
+  @Roles('cliente')
+  @ApiBearerAuth('supabase-jwt')
+  @ApiUnauthorizedResponse({ description: 'Token ausente o no válido.' })
+  @ApiForbiddenResponse({ description: 'Se requiere rol cliente.' })
+  @ApiOperation({ summary: 'Consultar las reservas del cliente autenticado' })
+  @ApiOkResponse({
+    description:
+      'Reservas pertenecientes exclusivamente al usuario autenticado.',
+    type: ReservasResponseDto,
+  })
+  @ApiResponse({ status: 500, description: 'Error al consultar Supabase.' })
+  findMine(@Req() request: AuthenticatedRequest) {
+    if (!request.user) {
+      throw new UnauthorizedException('La sesión no está autenticada.');
+    }
+    return this.reservationsService.findMine(request.user);
+  }
 }

@@ -705,6 +705,73 @@ input:focus-visible {
   overflow: visible;
   text-align: center;
 }
+.bookings-dialog {
+  width: min(620px, calc(100% - 28px));
+  max-height: min(80vh, 760px);
+  padding: 34px;
+}
+.bookings-dialog-content h2 {
+  margin: 10px 0 5px;
+  font-family: 'Playfair Display', serif;
+  font-size: 29px;
+  font-weight: 500;
+}
+.bookings-intro,
+.bookings-status {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.bookings-status {
+  margin: 16px 0 10px;
+}
+.my-bookings-list {
+  display: grid;
+  gap: 10px;
+  max-height: 48vh;
+  overflow-y: auto;
+}
+.my-booking-card {
+  padding: 15px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #fff;
+}
+.my-booking-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.my-booking-heading h3 {
+  margin: 0;
+  font-size: 14px;
+}
+.my-booking-heading p,
+.my-booking-dates {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+.my-booking-status {
+  padding: 5px 8px;
+  border-radius: 20px;
+  background: var(--sage);
+  color: var(--green);
+  font-size: 10px;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+.my-booking-status.status-cancelada {
+  background: #f7e8e5;
+  color: #8c493e;
+}
+.my-booking-card > strong {
+  display: block;
+  margin-top: 9px;
+  color: var(--green);
+  font-size: 14px;
+}
 .success-close {
   position: absolute;
   top: 0;

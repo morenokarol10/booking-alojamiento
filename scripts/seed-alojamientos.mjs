@@ -228,6 +228,17 @@ const supabase = createClient(supabaseUrl, serviceRoleKey, {
   auth: { autoRefreshToken: false, persistSession: false },
 });
 
+for (const accommodation of accommodations) {
+  if (
+    !Array.isArray(accommodation.servicios) ||
+    !accommodation.servicios.every((service) => typeof service === 'string')
+  ) {
+    throw new TypeError(
+      `Los servicios de ${accommodation.nombre} deben ser un arreglo de texto.`,
+    );
+  }
+}
+
 const { data, error } = await supabase
   .from('alojamientos')
   .upsert(accommodations, { onConflict: 'id' })

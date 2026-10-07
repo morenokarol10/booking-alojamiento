@@ -72,6 +72,59 @@ describe('alojamiento mapper', () => {
   });
 
   it.each([
+    ['native text array', ['WiFi', 'Desayuno incluido']],
+    ['JSON-encoded text array', '["WiFi","Desayuno incluido"]'],
+  ])('normalizes services from a %s', (_description, servicios) => {
+    const entity = toAlojamientoEntity({
+      id: '10000000-0000-4000-8000-000000000001',
+      proveedor_id: '20000000-0000-4000-8000-000000000001',
+      nombre: 'Suite Quito',
+      descripcion: null,
+      tipo: 'hotel',
+      ciudad: 'Quito',
+      direccion: 'Centro Histórico',
+      coordenadas: { latitud: -0.22, longitud: -78.51 },
+      precio_base_noche: '85.00',
+      moneda: 'USD',
+      capacidad_maxima: 4,
+      habitaciones_disponibles: 2,
+      servicios,
+      politica_cancelacion: null,
+      imagenes: '["https://example.com/room.jpg"]',
+      created_at: '2026-10-07T00:00:00.000Z',
+    });
+
+    expect(entity.servicios).toEqual(['WiFi', 'Desayuno incluido']);
+    expect(entity.imagenes).toEqual(['https://example.com/room.jpg']);
+  });
+
+  it.each(['not json', '{"servicio":"WiFi"}', '[1,2]'])(
+    'rejects malformed JSON array values for services: %s',
+    (servicios) => {
+      expect(() =>
+        toAlojamientoEntity({
+          id: '10000000-0000-4000-8000-000000000001',
+          proveedor_id: '20000000-0000-4000-8000-000000000001',
+          nombre: 'Suite Quito',
+          descripcion: null,
+          tipo: 'hotel',
+          ciudad: 'Quito',
+          direccion: 'Centro Histórico',
+          coordenadas: { latitud: -0.22, longitud: -78.51 },
+          precio_base_noche: '85.00',
+          moneda: 'USD',
+          capacidad_maxima: 4,
+          habitaciones_disponibles: 2,
+          servicios,
+          politica_cancelacion: null,
+          imagenes: [],
+          created_at: '2026-10-07T00:00:00.000Z',
+        }),
+      ).toThrow('Supabase devolvió una lista no válida para servicios.');
+    },
+  );
+
+  it.each([
     ['null coordinates', null],
     ['a non-object JSON value', 'not coordinates'],
     [

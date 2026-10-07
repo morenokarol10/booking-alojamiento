@@ -392,7 +392,7 @@ async function initializeMarketplace() {
     try {
       const user = await window.BookingAuth.fetchProfile();
       if (user) {
-        adminLink.hidden = user.role !== 'admin';
+        if (user.role === 'admin') adminLink.hidden = false;
         myBookingsLink.hidden = user.role !== 'cliente';
       }
       if (user) {

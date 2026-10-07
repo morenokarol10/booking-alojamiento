@@ -142,15 +142,30 @@ function requireNumber(value: unknown, field: string): number {
 }
 
 function stringArray(value: unknown, field: string): string[] {
-  if (
-    !Array.isArray(value) ||
-    !value.every((item) => typeof item === 'string')
-  ) {
+  let parsedValue = value;
+  if (typeof value === 'string') {
+    try {
+      parsedValue = JSON.parse(value);
+    } catch {
+      throw new InternalServerErrorException(
+        `Supabase devolvió una lista no válida para ${field}.`,
+      );
+    }
+  }
+
+  if (!isStringArray(parsedValue)) {
     throw new InternalServerErrorException(
       `Supabase devolvió una lista no válida para ${field}.`,
     );
   }
-  return value;
+  return parsedValue;
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return (
+    Array.isArray(value) &&
+    value.every((item: unknown) => typeof item === 'string')
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

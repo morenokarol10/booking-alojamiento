@@ -115,9 +115,9 @@ Render inyecta `PORT`; localmente la aplicación usa 3000 por defecto.
 El Panel permite consultar alojamientos, crear, editar y eliminar registros,
 consultar reservas y visualizar eventos. Sus recursos de interfaz están en
 [public/admin/](./public/admin/). La página valida la sesión antes de mostrar
-el contenido, oculta la navegación administrativa en el Marketplace para
-usuarios no admin y redirige al Marketplace a los clientes que intenten abrir
-el Panel.
+el contenido, muestra el botón **Modo Administración** solo tras validar una
+sesión cuyo rol sea exactamente `admin`, y redirige al Marketplace a los
+clientes que intenten abrir el Panel.
 
 La protección efectiva no depende solo de la interfaz:
 
@@ -167,6 +167,30 @@ npm run seed:alojamientos
 Configura `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY` en `.env` o en el entorno.
 El script no se ejecuta automáticamente al iniciar el backend ni al desplegar.
 Mantén la service-role key fuera del cliente y de Git.
+
+#### Actividad de prueba sin crear usuarios de autenticación
+
+[scripts/seed-usuarios.mjs](./scripts/seed-usuarios.mjs) crea o actualiza 30
+reservas ficticias asociadas a alojamientos existentes. Usa correos bajo
+`example.com` y deja `cliente_id` en `NULL`: no crea cuentas, contraseñas ni
+identidades en Supabase Auth, y no permite que estos datos inicien sesión.
+Requiere primero alojamientos y las variables `SUPABASE_URL` y
+`SUPABASE_SERVICE_ROLE_KEY`:
+
+```powershell
+npm run seed:usuarios
+```
+
+El seed es repetible gracias a IDs fijos y `upsert`; las reservas de prueba se
+mezclan con las de clientes en el panel administrativo, pero no aparecen en
+**Mis reservas** de una cuenta real.
+
+#### Normalización de listas de Supabase
+
+`servicios` e `imagenes` se almacenan como `TEXT[]`. El mapper de alojamientos
+responde siempre arreglos de strings: además de los arreglos nativos, acepta
+valores serializados como JSON (`["WiFi"]`) y responde con error explícito si
+el dato no se puede validar.
 
 ### 3.3 Marketplace Web
 
@@ -364,7 +388,9 @@ reserva puede persistir sin evento. Para robustecerlo en una siguiente fase:
 │   ├── login/                     # acceso y registro
 │   └── admin/                     # Panel Admin
 ├── scripts/
-│   └── seed-admin.mjs             # alta/actualización admin explícita
+│   ├── seed-admin.mjs              # alta/actualización admin explícita
+│   ├── seed-alojamientos.mjs       # alojamientos de prueba
+│   └── seed-usuarios.mjs           # reservas con clientes ficticios
 └── src/
     ├── modules/
     │   ├── accommodations/        # catálogo CRUD, DTOs y mappers

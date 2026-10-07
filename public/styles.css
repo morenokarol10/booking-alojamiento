@@ -93,6 +93,9 @@ input:focus-visible {
   border: 1px solid var(--line);
   border-radius: 30px;
 }
+#admin-mode-link[hidden] {
+  display: none !important;
+}
 
 .hero {
   position: relative;

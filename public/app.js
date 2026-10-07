@@ -311,12 +311,13 @@ async function submitBooking(event) {
 async function initializeMarketplace() {
   const adminLink = document.querySelector('#admin-mode-link');
   const accountLink = document.querySelector('#account-link');
+  adminLink.hidden = true;
   const token = window.BookingAuth.token();
   if (token) {
     try {
       const user = await window.BookingAuth.fetchProfile();
-      if (user?.role === 'admin') {
-        adminLink.hidden = false;
+      if (user) {
+        adminLink.hidden = user.role !== 'admin';
       }
       if (user) {
         accountLink.textContent = 'Cerrar sesión';
@@ -333,8 +334,13 @@ async function initializeMarketplace() {
     }
   }
   loadListings();
-  if (new URLSearchParams(window.location.search).get('accessDenied') === '1') {
-    showToast('Acceso denegado: esta cuenta no tiene rol de administrador.');
+  if (
+    new URLSearchParams(window.location.search).get('accessDenied') === 'admin'
+  ) {
+    showToast(
+      'Acceso denegado: Se requieren credenciales de administrador.',
+      true,
+    );
   }
 }
 

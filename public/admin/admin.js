@@ -92,7 +92,7 @@ async function apiRequest(path, options = {}) {
     throw new Error('Tu sesión expiró. Inicia sesión nuevamente.');
   }
   if (response.status === 403) {
-    window.location.assign('/marketplace/?accessDenied=1');
+    window.location.assign('/marketplace/?accessDenied=admin');
     throw new Error('Esta cuenta no tiene permisos de administrador.');
   }
   if (!response.ok) {
@@ -560,7 +560,7 @@ async function initializeAdmin() {
       return;
     }
     if (user.role !== 'admin') {
-      window.location.assign('/marketplace/?accessDenied=1');
+      window.location.replace('/marketplace/?accessDenied=admin');
       return;
     }
 
@@ -575,9 +575,8 @@ async function initializeAdmin() {
     document.querySelector('#admin-auth-check').hidden = true;
     await Promise.all([loadListings(), loadBookings(), loadEvents()]);
   } catch (error) {
-    const check = document.querySelector('#admin-auth-check');
-    check.textContent = `${error.message} Recarga la página para intentarlo de nuevo.`;
-    check.classList.add('error');
+    console.error('No se pudo validar el acceso administrativo.', error);
+    window.location.replace('/login/?next=%2Fadmin%2F');
   }
 }
 

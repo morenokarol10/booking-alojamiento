@@ -90,7 +90,7 @@ export class AuthService {
     });
     if (error?.code === 'email_not_confirmed') {
       throw new UnauthorizedException(
-        'La cuenta existe, pero el correo aún no está confirmado. Revisa tu bandeja de entrada o solicita recuperar la contraseña.',
+        'Esta cuenta de prueba aún no está confirmada. En Supabase, ve a Authentication > Users, abre el usuario y confirma su correo. Los registros nuevos se confirman automáticamente cuando SUPABASE_AUTH_AUTO_CONFIRM_SIGNUPS=true está activo en Render.',
       );
     }
     if (error || !data.user || !data.session) {

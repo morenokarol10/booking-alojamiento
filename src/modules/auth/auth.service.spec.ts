@@ -288,7 +288,7 @@ describe('AuthService', () => {
         email: 'cliente@example.com',
         password: 'ClienteSeguro123!',
       }),
-    ).rejects.toThrow(/correo aún no está confirmado/i);
+    ).rejects.toThrow(/Authentication > Users/i);
   });
 
   it('reports email confirmation when Supabase creates an unconfirmed account', async () => {

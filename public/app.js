@@ -162,13 +162,37 @@ function nightsBetween(start, end) {
   return Math.max(0, Math.round((endDate - startDate) / 86400000));
 }
 
-function renderDetails(listing) {
+function getUserProfileValue(user, keys) {
+  const sources = [user, user?.user_metadata, user?.userMetadata];
+  for (const source of sources) {
+    if (!source || typeof source !== 'object') continue;
+    for (const key of keys) {
+      const value = source[key];
+      if (typeof value === 'string' && value.trim()) return value.trim();
+    }
+  }
+  return '';
+}
+
+function renderDetails(listing, user) {
   const today = new Date();
   const localToday = new Date(
     today.getTime() - today.getTimezoneOffset() * 60000,
   )
     .toISOString()
     .slice(0, 10);
+  const customerName = getUserProfileValue(user, [
+    'full_name',
+    'fullName',
+    'name',
+    'nombre',
+  ]);
+  const customerEmail = getUserProfileValue(user, ['email']);
+  const customerPhone = getUserProfileValue(user, [
+    'phone',
+    'phone_number',
+    'telefono',
+  ]);
   dialogContent.innerHTML = `
     <img class="detail-photo" src="${escapeHtml(imageFor(listing))}" alt="${escapeHtml(listing.nombre)}" />
     <div class="detail-body">
@@ -188,13 +212,13 @@ function renderDetails(listing) {
         </div>
         <form class="booking-form" id="booking-form">
           <label class="full-width">Nombre completo
-            <input name="clienteNombre" type="text" autocomplete="name" placeholder="Tu nombre" minlength="2" required />
+            <input name="clienteNombre" type="text" autocomplete="name" placeholder="Tu nombre" minlength="2" value="${escapeHtml(customerName)}" ${customerName ? 'readonly' : ''} required />
           </label>
           <label class="full-width">Correo electrónico
-            <input name="clienteEmail" type="email" autocomplete="email" placeholder="nombre@correo.com" required />
+            <input name="clienteEmail" type="email" autocomplete="email" placeholder="nombre@correo.com" value="${escapeHtml(customerEmail)}" ${customerEmail ? 'readonly' : ''} required />
           </label>
           <label class="full-width">Teléfono
-            <input name="clienteTelefono" type="tel" autocomplete="tel" placeholder="+593 99 123 4567" minlength="5" required />
+            <input name="clienteTelefono" type="tel" autocomplete="tel" placeholder="+593 99 123 4567" minlength="5" value="${escapeHtml(customerPhone)}" ${customerPhone ? 'readonly' : ''} required />
           </label>
           <label>Fecha de inicio
             <input name="fechaCheckin" type="date" min="${localToday}" required />
@@ -445,10 +469,32 @@ grid.addEventListener('click', (event) => {
   }
   const card = event.target.closest('[data-listing-index]');
   if (!card) return;
-  selectedListing = currentListings[Number(card.dataset.listingIndex)];
-  renderDetails(selectedListing);
-  detailDialog.showModal();
+  void openBookingDetails(currentListings[Number(card.dataset.listingIndex)]);
 });
+
+async function openBookingDetails(listing) {
+  if (!window.BookingAuth.token()) {
+    window.BookingAuth.goToLogin('/marketplace/');
+    return;
+  }
+
+  try {
+    const user = await window.BookingAuth.fetchProfile();
+    if (!user) {
+      window.BookingAuth.goToLogin('/marketplace/');
+      return;
+    }
+    if (user.role !== 'cliente') {
+      showToast('Inicia sesión con una cuenta de cliente para reservar.');
+      return;
+    }
+    selectedListing = listing;
+    renderDetails(listing, user);
+    detailDialog.showModal();
+  } catch (error) {
+    showToast(error.message || 'No se pudo validar tu sesión.');
+  }
+}
 
 grid.addEventListener('keydown', (event) => {
   if (

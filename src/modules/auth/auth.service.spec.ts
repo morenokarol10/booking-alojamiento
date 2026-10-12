@@ -21,7 +21,11 @@ describe('AuthService', () => {
       id: '50000000-0000-4000-8000-000000000001',
       email: 'cliente@example.com',
       app_metadata: {},
-      user_metadata: { role: 'cliente' },
+      user_metadata: {
+        role: 'cliente',
+        full_name: 'María Pérez',
+        phone: '+593991234567',
+      },
       identities: [{ id: 'identity-1' }],
     };
     const createUser = jest.fn().mockResolvedValue({
@@ -41,6 +45,8 @@ describe('AuthService', () => {
     const service = makeService({ signInWithPassword }, { createUser }, true);
 
     const response = await service.register({
+      fullName: 'María Pérez',
+      phone: '+593991234567',
       email: 'cliente@example.com',
       password: 'ClienteSeguro123!',
     });
@@ -49,13 +55,21 @@ describe('AuthService', () => {
       email: 'cliente@example.com',
       password: 'ClienteSeguro123!',
       email_confirm: true,
-      user_metadata: { role: 'cliente' },
+      user_metadata: {
+        role: 'cliente',
+        full_name: 'María Pérez',
+        phone: '+593991234567',
+      },
     });
     expect(signInWithPassword).toHaveBeenCalledWith({
       email: 'cliente@example.com',
       password: 'ClienteSeguro123!',
     });
     expect(response.data.user.role).toBe('cliente');
+    expect(response.data.user).toMatchObject({
+      fullName: 'María Pérez',
+      phone: '+593991234567',
+    });
     expect(response.data.session.accessToken).toBe('access-token');
   });
 
@@ -75,6 +89,8 @@ describe('AuthService', () => {
     const service = makeService({ signUp });
 
     await service.register({
+      fullName: 'María Pérez',
+      phone: '+593991234567',
       email: 'cliente@example.com',
       password: 'ClienteSeguro123!',
     });
@@ -82,7 +98,13 @@ describe('AuthService', () => {
     expect(signUp).toHaveBeenCalledWith({
       email: 'cliente@example.com',
       password: 'ClienteSeguro123!',
-      options: { data: { role: 'cliente' } },
+      options: {
+        data: {
+          role: 'cliente',
+          full_name: 'María Pérez',
+          phone: '+593991234567',
+        },
+      },
     });
   });
 
@@ -98,6 +120,8 @@ describe('AuthService', () => {
 
     await expect(
       service.register({
+        fullName: 'María Pérez',
+        phone: '+593991234567',
         email: 'cliente@example.com',
         password: 'ClienteSeguro123!',
       }),
@@ -116,6 +140,8 @@ describe('AuthService', () => {
 
     await expect(
       service.register({
+        fullName: 'María Pérez',
+        phone: '+593991234567',
         email: 'cliente@example.com',
         password: 'ClienteSeguro123!',
       }),
@@ -154,6 +180,8 @@ describe('AuthService', () => {
     const service = makeService({ signUp });
 
     const response = await service.register({
+      fullName: 'María Pérez',
+      phone: '+593991234567',
       email: 'cliente@example.com',
       password: 'ClienteSeguro123!',
     });
@@ -161,7 +189,13 @@ describe('AuthService', () => {
     expect(signUp).toHaveBeenCalledWith({
       email: 'cliente@example.com',
       password: 'ClienteSeguro123!',
-      options: { data: { role: 'cliente' } },
+      options: {
+        data: {
+          role: 'cliente',
+          full_name: 'María Pérez',
+          phone: '+593991234567',
+        },
+      },
     });
     expect(response.data.user).toMatchObject({
       id: user.id,
@@ -188,6 +222,8 @@ describe('AuthService', () => {
     const service = makeService({ signUp });
 
     const response = await service.register({
+      fullName: 'María Pérez',
+      phone: '+593991234567',
       email: 'cliente@example.com',
       password: 'ClienteSeguro123!',
     });

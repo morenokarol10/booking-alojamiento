@@ -10,6 +10,9 @@ export function toReservaDatabase(
   dto: CreateReservaDto,
   values: {
     clienteId: string;
+    clienteNombre: string;
+    clienteEmail: string;
+    clienteTelefono?: string;
     precioTotal: number;
     moneda: string;
     pagoReferencia: string;
@@ -18,9 +21,9 @@ export function toReservaDatabase(
   return {
     cliente_id: values.clienteId,
     alojamiento_id: dto.alojamientoId,
-    cliente_nombre: dto.clienteNombre,
-    cliente_email: dto.clienteEmail,
-    cliente_telefono: dto.clienteTelefono ?? null,
+    cliente_nombre: values.clienteNombre,
+    cliente_email: values.clienteEmail,
+    cliente_telefono: values.clienteTelefono ?? null,
     fecha_checkin: dto.fechaCheckin,
     fecha_checkout: dto.fechaCheckout,
     num_huespedes: dto.numHuespedes,

@@ -19,6 +19,14 @@ export class ReservationsService {
   ) {}
 
   async create(dto: CreateReservaDto, user: AuthenticatedUser) {
+    const clienteNombre = user.fullName?.trim();
+    const clienteEmail = user.email.trim();
+    if (!clienteNombre || !clienteEmail) {
+      throw new BadRequestException(
+        'El perfil autenticado debe incluir nombre completo y correo para realizar una reserva.',
+      );
+    }
+
     const nights = this.getNights(dto.fechaCheckin, dto.fechaCheckout);
     if (nights <= 0) {
       throw new BadRequestException(
@@ -90,6 +98,9 @@ export class ReservationsService {
           moneda: String(alojamiento.moneda),
           pagoReferencia,
           clienteId: user.id,
+          clienteNombre,
+          clienteEmail,
+          clienteTelefono: user.phone,
         }),
       )
       .select('*')

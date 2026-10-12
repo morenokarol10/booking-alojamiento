@@ -121,9 +121,6 @@ describe('ReservationsService payment and event flow', () => {
     const response = await service.create(
       {
         alojamientoId: accommodation.id,
-        clienteNombre: 'María Pérez',
-        clienteEmail: 'maria@example.com',
-        clienteTelefono: '+593991234567',
         fechaCheckin: '2026-11-10',
         fechaCheckout: '2026-11-13',
         numHuespedes: 2,
@@ -133,6 +130,8 @@ describe('ReservationsService payment and event flow', () => {
         id: '50000000-0000-4000-8000-000000000001',
         email: 'maria@example.com',
         role: 'cliente',
+        fullName: 'María Pérez',
+        phone: '+593991234567',
       },
     );
 
@@ -174,9 +173,6 @@ describe('ReservationsService payment and event flow', () => {
     await service.create(
       {
         alojamientoId: accommodation.id,
-        clienteNombre: 'María Pérez',
-        clienteEmail: 'maria@example.com',
-        clienteTelefono: '+593991234567',
         fechaCheckin: '2026-12-10',
         fechaCheckout: '2026-12-12',
         numHuespedes: 2,
@@ -186,6 +182,8 @@ describe('ReservationsService payment and event flow', () => {
         id: '50000000-0000-4000-8000-000000000001',
         email: 'maria@example.com',
         role: 'cliente',
+        fullName: 'María Pérez',
+        phone: '+593991234567',
       },
     );
 

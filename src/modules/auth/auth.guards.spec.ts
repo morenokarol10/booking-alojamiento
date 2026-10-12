@@ -25,7 +25,11 @@ describe('SupabaseAuthGuard', () => {
               id: 'user-id',
               email: 'user@example.com',
               app_metadata: {},
-              user_metadata: { role: 'admin' },
+              user_metadata: {
+                role: 'admin',
+                full_name: 'María Pérez',
+                phone: '+593991234567',
+              },
             },
           },
           error: null,
@@ -39,6 +43,8 @@ describe('SupabaseAuthGuard', () => {
       id: 'user-id',
       email: 'user@example.com',
       role: 'cliente',
+      fullName: 'María Pérez',
+      phone: '+593991234567',
     });
   });
 

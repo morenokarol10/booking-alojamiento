@@ -61,6 +61,27 @@
           <button class="submit-button" type="submit">Iniciar sesión</button>
         </form>
         <form id="register-form" autocomplete="off" hidden novalidate>
+          <label for="register-full-name">Nombre completo</label>
+          <input
+            id="register-full-name"
+            name="fullName"
+            type="text"
+            autocomplete="name"
+            minlength="2"
+            maxlength="160"
+            required
+          />
+          <label for="register-phone">Teléfono</label>
+          <input
+            id="register-phone"
+            name="phone"
+            type="tel"
+            autocomplete="tel"
+            minlength="5"
+            maxlength="32"
+            placeholder="+593991234567"
+            required
+          />
           <label for="register-email">Correo electrónico</label>
           <input
             id="register-email"

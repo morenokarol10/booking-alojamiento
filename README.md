@@ -174,8 +174,16 @@ correcto.
 #### Registro e inicio de sesión de clientes
 
 El registro usa Supabase Auth (`auth.users`), no una tabla pública propia. El
-backend asigna `user_metadata.role = cliente`; el rol administrativo sigue
-dependiendo de `app_metadata` y nunca puede asignarse desde el formulario.
+formulario solicita nombre completo, teléfono, correo y contraseña. El backend
+guarda nombre y teléfono en `user_metadata` del usuario creado y asigna
+`user_metadata.role = cliente`; el rol administrativo sigue dependiendo de
+`app_metadata` y nunca puede asignarse desde el formulario. El endpoint de perfil
+expone el nombre y teléfono del usuario autenticado junto con su correo.
+
+El formulario de reserva solo envía el alojamiento, las fechas, el número de
+huéspedes y el método de pago simulado. El ID, nombre, correo y teléfono del
+cliente se obtienen en el backend desde el token validado y los metadatos de
+Supabase Auth; no se aceptan como datos aportados por el navegador.
 
 Por defecto, Supabase controla la confirmación del correo. Para una demo o
 evaluación temporal, define `SUPABASE_AUTH_AUTO_CONFIRM_SIGNUPS=true` en el

@@ -40,7 +40,13 @@ export class AuthService {
     const { data, error } = await this.supabase.auth.signUp({
       email: dto.email,
       password: dto.password,
-      options: { data: { role: 'cliente' } },
+      options: {
+        data: {
+          role: 'cliente',
+          full_name: dto.fullName.trim(),
+          phone: dto.phone.trim(),
+        },
+      },
     });
     if (error) {
       this.throwRegistrationError(error.code);
@@ -107,11 +113,35 @@ export class AuthService {
   private mapUser(user: User): AuthenticatedUser {
     const role: UserRole =
       user.app_metadata?.role === 'admin' ? 'admin' : 'cliente';
+    const fullName = this.metadataString(user.user_metadata, [
+      'full_name',
+      'fullName',
+      'name',
+      'nombre',
+    ]);
+    const phone = this.metadataString(user.user_metadata, [
+      'phone',
+      'phone_number',
+      'telefono',
+    ]);
     return {
       id: user.id,
       email: user.email ?? '',
       role,
+      ...(fullName ? { fullName } : {}),
+      ...(phone ? { phone } : {}),
     };
+  }
+
+  private metadataString(
+    metadata: User['user_metadata'],
+    keys: string[],
+  ): string | undefined {
+    for (const key of keys) {
+      const value = metadata?.[key];
+      if (typeof value === 'string' && value.trim()) return value.trim();
+    }
+    return undefined;
   }
 
   private getRegistrationErrorMessage(code: string | undefined): string {
@@ -137,7 +167,11 @@ export class AuthService {
       email: dto.email,
       password: dto.password,
       email_confirm: true,
-      user_metadata: { role: 'cliente' },
+      user_metadata: {
+        role: 'cliente',
+        full_name: dto.fullName.trim(),
+        phone: dto.phone.trim(),
+      },
     });
     if (error) {
       this.throwRegistrationError(error.code);

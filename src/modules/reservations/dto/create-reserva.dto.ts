@@ -1,10 +1,8 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   IsDateString,
-  IsEmail,
   IsInt,
-  IsOptional,
   IsString,
   IsUUID,
   MaxLength,
@@ -19,23 +17,6 @@ export class CreateReservaDto {
   })
   @IsUUID()
   alojamientoId!: string;
-
-  @ApiProperty({ example: 'María Pérez', minLength: 2 })
-  @IsString()
-  @MinLength(2)
-  @MaxLength(160)
-  clienteNombre!: string;
-
-  @ApiProperty({ example: 'maria@example.com' })
-  @IsEmail()
-  clienteEmail!: string;
-
-  @ApiPropertyOptional({ example: '+593991234567' })
-  @IsOptional()
-  @IsString()
-  @MinLength(5)
-  @MaxLength(32)
-  clienteTelefono?: string;
 
   @ApiProperty({ format: 'date', example: '2026-11-10' })
   @IsDateString({ strict: true })

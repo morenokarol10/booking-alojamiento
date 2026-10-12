@@ -32,11 +32,36 @@ export class SupabaseAuthGuard implements CanActivate {
 
     const role: UserRole =
       data.user.app_metadata?.role === 'admin' ? 'admin' : 'cliente';
+    const metadata = data.user.user_metadata;
+    const fullName = this.metadataString(metadata, [
+      'full_name',
+      'fullName',
+      'name',
+      'nombre',
+    ]);
+    const phone = this.metadataString(metadata, [
+      'phone',
+      'phone_number',
+      'telefono',
+    ]);
     request.user = {
       id: data.user.id,
       email: data.user.email ?? '',
       role,
+      ...(fullName ? { fullName } : {}),
+      ...(phone ? { phone } : {}),
     };
     return true;
+  }
+
+  private metadataString(
+    metadata: Record<string, unknown> | undefined,
+    keys: string[],
+  ): string | undefined {
+    for (const key of keys) {
+      const value = metadata?.[key];
+      if (typeof value === 'string' && value.trim()) return value.trim();
+    }
+    return undefined;
   }
 }

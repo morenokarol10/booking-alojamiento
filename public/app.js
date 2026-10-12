@@ -162,37 +162,13 @@ function nightsBetween(start, end) {
   return Math.max(0, Math.round((endDate - startDate) / 86400000));
 }
 
-function getUserProfileValue(user, keys) {
-  const sources = [user, user?.user_metadata, user?.userMetadata];
-  for (const source of sources) {
-    if (!source || typeof source !== 'object') continue;
-    for (const key of keys) {
-      const value = source[key];
-      if (typeof value === 'string' && value.trim()) return value.trim();
-    }
-  }
-  return '';
-}
-
-function renderDetails(listing, user) {
+function renderDetails(listing) {
   const today = new Date();
   const localToday = new Date(
     today.getTime() - today.getTimezoneOffset() * 60000,
   )
     .toISOString()
     .slice(0, 10);
-  const customerName = getUserProfileValue(user, [
-    'full_name',
-    'fullName',
-    'name',
-    'nombre',
-  ]);
-  const customerEmail = getUserProfileValue(user, ['email']);
-  const customerPhone = getUserProfileValue(user, [
-    'phone',
-    'phone_number',
-    'telefono',
-  ]);
   dialogContent.innerHTML = `
     <img class="detail-photo" src="${escapeHtml(imageFor(listing))}" alt="${escapeHtml(listing.nombre)}" />
     <div class="detail-body">
@@ -211,15 +187,6 @@ function renderDetails(listing, user) {
           <span>Sin cargos ocultos</span>
         </div>
         <form class="booking-form" id="booking-form">
-          <label class="full-width">Nombre completo
-            <input name="clienteNombre" type="text" autocomplete="name" placeholder="Tu nombre" minlength="2" value="${escapeHtml(customerName)}" ${customerName ? 'readonly' : ''} required />
-          </label>
-          <label class="full-width">Correo electrónico
-            <input name="clienteEmail" type="email" autocomplete="email" placeholder="nombre@correo.com" value="${escapeHtml(customerEmail)}" ${customerEmail ? 'readonly' : ''} required />
-          </label>
-          <label class="full-width">Teléfono
-            <input name="clienteTelefono" type="tel" autocomplete="tel" placeholder="+593 99 123 4567" minlength="5" value="${escapeHtml(customerPhone)}" ${customerPhone ? 'readonly' : ''} required />
-          </label>
           <label>Fecha de inicio
             <input name="fechaCheckin" type="date" min="${localToday}" required />
           </label>
@@ -365,9 +332,6 @@ async function submitBooking(event) {
   const formData = new FormData(form);
   const payload = {
     alojamientoId: selectedListing.id,
-    clienteNombre: formData.get('clienteNombre').toString().trim(),
-    clienteEmail: formData.get('clienteEmail').toString().trim(),
-    clienteTelefono: formData.get('clienteTelefono').toString().trim(),
     fechaCheckin: formData.get('fechaCheckin').toString(),
     fechaCheckout: formData.get('fechaCheckout').toString(),
     numHuespedes: Number(formData.get('numHuespedes')),
@@ -489,7 +453,7 @@ async function openBookingDetails(listing) {
       return;
     }
     selectedListing = listing;
-    renderDetails(listing, user);
+    renderDetails(listing);
     detailDialog.showModal();
   } catch (error) {
     showToast(error.message || 'No se pudo validar tu sesión.');

@@ -5,6 +5,7 @@ import {
   HttpCode,
   HttpStatus,
   Post,
+  Put,
   Req,
   UnauthorizedException,
   UseGuards,
@@ -22,6 +23,7 @@ import type { AuthenticatedRequest } from './auth.types';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 
 @ApiTags('Autenticación')
 @Controller('api/v1/auth')
@@ -60,5 +62,22 @@ export class AuthController {
       throw new UnauthorizedException('La sesión no está autenticada.');
     }
     return this.authService.getProfile(request.user);
+  }
+
+  @Put('me')
+  @UseGuards(SupabaseAuthGuard)
+  @ApiBearerAuth('supabase-jwt')
+  @ApiOperation({ summary: 'Actualizar el perfil del usuario autenticado' })
+  @ApiResponse({ status: 200, description: 'Perfil actualizado.' })
+  @ApiResponse({ status: 400, description: 'Datos de perfil no válidos.' })
+  @ApiUnauthorizedResponse({ description: 'Token ausente o no válido.' })
+  updateMe(
+    @Body() dto: UpdateProfileDto,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    if (!request.user) {
+      throw new UnauthorizedException('La sesión no está autenticada.');
+    }
+    return this.authService.updateProfile(request.user, dto);
   }
 }

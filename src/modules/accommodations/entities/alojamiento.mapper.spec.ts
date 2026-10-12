@@ -3,6 +3,7 @@ import {
   toAlojamientoEntity,
 } from './alojamiento.mapper';
 import { CreateAlojamientoDto } from '../dto/create-alojamiento.dto';
+import { UpdateAlojamientoDto } from '../dto/update-alojamiento.dto';
 
 describe('alojamiento mapper', () => {
   it('maps request fields only to real alojamientos columns', () => {
@@ -39,6 +40,36 @@ describe('alojamiento mapper', () => {
       urls_imagenes: dto.imagenes,
     });
     expect(toAlojamientoDatabase(dto)).not.toHaveProperty('coordenadas');
+  });
+
+  it('assigns the default provider and Quito coordinates for a new listing', () => {
+    const dto = {
+      nombre: 'Suite Quito',
+      tipo: 'hotel' as const,
+      ciudad: 'Quito',
+      direccion: 'Centro Histórico',
+      precioBaseNoche: 85,
+      capacidadMaxima: 4,
+      habitacionesDisponibles: 1,
+      imagenes: ['https://example.com/room.jpg'],
+    } satisfies CreateAlojamientoDto;
+
+    expect(toAlojamientoDatabase(dto, true)).toMatchObject({
+      proveedor_id: '967fd210-4ab8-4efe-81f6-5cfbbfdf20b5',
+      latitud: -0.1807,
+      longitud: -78.4678,
+    });
+  });
+
+  it('does not overwrite provider or coordinates when a partial update omits them', () => {
+    const dto = {
+      nombre: 'Suite Quito actualizada',
+    } satisfies UpdateAlojamientoDto;
+
+    const record = toAlojamientoDatabase(dto);
+    expect(record).not.toHaveProperty('proveedor_id');
+    expect(record).not.toHaveProperty('latitud');
+    expect(record).not.toHaveProperty('longitud');
   });
 
   it('normalizes comma-separated lists and numeric values for Supabase', () => {

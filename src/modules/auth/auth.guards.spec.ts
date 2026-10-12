@@ -72,6 +72,30 @@ describe('SupabaseAuthGuard', () => {
     expect(request.user?.role).toBe('admin');
   });
 
+  it('accepts an employee role assigned in app_metadata', async () => {
+    const request: AuthenticatedRequest = {
+      headers: { authorization: 'Bearer token' },
+    };
+    const supabase = {
+      auth: {
+        getUser: jest.fn().mockResolvedValue({
+          data: {
+            user: {
+              id: 'employee-id',
+              email: 'employee@example.com',
+              app_metadata: { role: 'empleado' },
+            },
+          },
+          error: null,
+        }),
+      },
+    } as unknown as SupabaseClient;
+    const guard = new SupabaseAuthGuard(supabase);
+
+    await expect(guard.canActivate(httpContext(request))).resolves.toBe(true);
+    expect(request.user?.role).toBe('empleado');
+  });
+
   it('rejects requests without a bearer token', async () => {
     const getUser = jest.fn();
     const supabase = {

@@ -124,11 +124,20 @@ clientes que intenten abrir el Panel.
 
 La protección efectiva no depende solo de la interfaz:
 
-- `POST`, `PUT` y `DELETE /api/v1/alojamientos` requieren el rol `admin`.
+- `POST` y `PUT /api/v1/alojamientos` permiten los roles `admin` y `empleado`;
+  `DELETE` requiere `admin`.
 - `GET /api/v1/admin/eventos` requiere `admin`.
 - `GET /api/v1/reservas` requiere `admin`.
 - `GET /api/v1/reservas/mis-reservas` requiere `cliente` y filtra por el ID del
   usuario autenticado.
+- `empleado` solo puede consultar, crear y editar alojamientos. No puede
+  eliminar alojamientos ni consultar reservas, eventos o gestionar cuentas.
+  Estas restricciones se aplican también en los endpoints.
+- Solo `admin` puede listar cuentas, crearlas y actualizar sus roles desde
+  **Gestión de usuarios** en el panel.
+- En el alta de alojamientos se asigna el proveedor predeterminado
+  `967fd210-4ab8-4efe-81f6-5cfbbfdf20b5`; si no se especifican coordenadas,
+  se guardan las coordenadas de Quito.
 - El rol se deriva del `app_metadata.role` retornado por Supabase Auth tras
   validar el Bearer token; un valor de `user_metadata` no concede privilegios.
 - Las rutas protegidas responden 401 si falta o no sirve el token y 403 si el
@@ -184,14 +193,14 @@ El formulario de reserva solo envía el alojamiento, las fechas, el número de
 huéspedes y el método de pago simulado. El ID, nombre, correo y teléfono del
 cliente se obtienen en el backend desde el token validado y los metadatos de
 Supabase Auth; no se aceptan como datos aportados por el navegador.
+El enlace **Mi Perfil** permite revisar y actualizar estos datos y consultar el
+historial de reservas.
 
-Por defecto, Supabase controla la confirmación del correo. Para una demo o
-evaluación temporal, define `SUPABASE_AUTH_AUTO_CONFIRM_SIGNUPS=true` en el
-entorno del backend (en Render: **Dashboard → servicio → Environment**) y
-despliega/reinicia el servicio. Con esa opción, el backend usa la clave
-`SUPABASE_SERVICE_ROLE_KEY` solo en el servidor para confirmar la cuenta y luego
-iniciar sesión automáticamente. Nunca expongas esa clave en el navegador. En
-producción, deja la opción en `false` y usa confirmación por correo.
+En el entorno de evaluación, `SUPABASE_AUTH_AUTO_CONFIRM_SIGNUPS=true` está
+configurado en `render.yaml` y en `.env.example`. El backend usa
+`SUPABASE_SERVICE_ROLE_KEY` solo en el servidor para confirmar la cuenta y
+luego iniciar sesión automáticamente. Nunca expongas esa clave en el navegador.
+En producción, establece la variable en `false` y usa confirmación por correo.
 
 Si Supabase indica que el correo ya existe, inicia sesión o usa recuperación de
 contraseña; no se crea una segunda cuenta. Los errores de registro se devuelven

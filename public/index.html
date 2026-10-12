@@ -22,8 +22,8 @@
       </a>
       <nav class="header-nav" aria-label="Navegación principal">
         <a href="#alojamientos">Explorar estancias</a>
-        <a class="host-link" id="my-bookings-link" href="#mis-reservas" hidden
-          >Mis reservas</a
+        <a class="host-link" id="my-bookings-link" href="#mi-perfil" hidden
+          >Mi Perfil</a
         >
         <a class="host-link" id="admin-mode-link" href="/admin/" hidden
           >Modo Administración</a
@@ -186,10 +186,41 @@
       </button>
       <div class="bookings-dialog-content">
         <span class="eyebrow section-eyebrow">TU CUENTA</span>
-        <h2 id="my-bookings-title">Mis reservas</h2>
-        <p class="bookings-intro">
-          Consulta las reservas realizadas con tu cuenta.
-        </p>
+        <h2 id="my-bookings-title">Mi perfil</h2>
+        <p class="bookings-intro">Consulta y actualiza tus datos personales.</p>
+        <form id="profile-form" class="profile-form">
+          <label for="profile-full-name">Nombre completo</label>
+          <input
+            id="profile-full-name"
+            name="fullName"
+            type="text"
+            minlength="2"
+            maxlength="160"
+            autocomplete="name"
+            required
+          />
+          <label for="profile-email">Correo electrónico</label>
+          <input
+            id="profile-email"
+            name="email"
+            type="email"
+            autocomplete="email"
+            required
+          />
+          <label for="profile-phone">Teléfono</label>
+          <input
+            id="profile-phone"
+            name="phone"
+            type="tel"
+            minlength="5"
+            maxlength="32"
+            autocomplete="tel"
+            required
+          />
+          <p id="profile-status" class="bookings-status" role="status" aria-live="polite"></p>
+          <button class="primary-button" type="submit">Guardar perfil</button>
+        </form>
+        <h3 class="profile-history-title">Historial de reservas</h3>
         <p
           class="bookings-status"
           id="my-bookings-status"

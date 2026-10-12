@@ -719,6 +719,38 @@ input:focus-visible {
   font-size: 29px;
   font-weight: 500;
 }
+.profile-form {
+  display: grid;
+  gap: 8px;
+  margin: 16px 0 24px;
+}
+.profile-form label {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+.profile-form input {
+  width: 100%;
+  min-height: 40px;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+}
+.profile-form .primary-button {
+  min-height: 40px;
+  margin-top: 4px;
+}
+.profile-form .bookings-status {
+  margin: 4px 0;
+}
+.profile-history-title {
+  margin: 0 0 10px;
+  color: var(--ink);
+  font-size: 14px;
+}
 .bookings-intro,
 .bookings-status {
   color: var(--muted);

@@ -21,9 +21,10 @@ export class ReservationsService {
   async create(dto: CreateReservaDto, user: AuthenticatedUser) {
     const clienteNombre = user.fullName?.trim();
     const clienteEmail = user.email.trim();
-    if (!clienteNombre || !clienteEmail) {
+    const clienteTelefono = user.phone?.trim();
+    if (!clienteNombre || !clienteEmail || !clienteTelefono) {
       throw new BadRequestException(
-        'El perfil autenticado debe incluir nombre completo y correo para realizar una reserva.',
+        'El perfil autenticado debe incluir nombre completo, correo y teléfono para realizar una reserva.',
       );
     }
 
@@ -100,7 +101,7 @@ export class ReservationsService {
           clienteId: user.id,
           clienteNombre,
           clienteEmail,
-          clienteTelefono: user.phone,
+          clienteTelefono,
         }),
       )
       .select('*')

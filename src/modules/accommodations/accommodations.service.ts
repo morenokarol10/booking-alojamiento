@@ -83,7 +83,7 @@ export class AccommodationsService {
     try {
       const result = await this.supabase
         .from(this.table)
-        .insert(toAlojamientoDatabase(dto))
+        .insert(toAlojamientoDatabase(dto, true))
         .select('*')
         .single();
 

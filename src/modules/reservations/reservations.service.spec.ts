@@ -51,6 +51,28 @@ class QueryMock {
 }
 
 describe('ReservationsService payment and event flow', () => {
+  it('requires contact details from the authenticated profile before reserving', async () => {
+    const service = new ReservationsService({} as SupabaseClient);
+
+    await expect(
+      service.create(
+        {
+          alojamientoId: '10000000-0000-4000-8000-000000000001',
+          fechaCheckin: '2026-11-10',
+          fechaCheckout: '2026-11-13',
+          numHuespedes: 2,
+          metodoPagoSimulado: 'tarjeta',
+        },
+        {
+          id: '50000000-0000-4000-8000-000000000001',
+          email: 'maria@example.com',
+          role: 'cliente',
+          fullName: 'María Pérez',
+        },
+      ),
+    ).rejects.toThrow(/nombre completo, correo y teléfono/i);
+  });
+
   it('supports multiple reservations and writes one EDA event per successful reservation', async () => {
     const inserts: Record<string, unknown[]> = {
       reservas: [],

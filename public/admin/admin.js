@@ -22,6 +22,7 @@ const toast = document.querySelector('#admin-toast');
 let listings = [];
 let pendingDelete = null;
 let toastTimeout;
+let currentUser = null;
 
 function escapeHtml(value = '') {
   return String(value).replace(/[&<>"']/g, (character) => {
@@ -183,11 +184,47 @@ function renderListings() {
           <td><span class="status-badge ${Number(listing.habitacionesDisponibles) > 0 ? 'available' : 'unavailable'}">${Number(listing.habitacionesDisponibles) > 0 ? `${Number(listing.habitacionesDisponibles)} disponible(s)` : 'Agotado'}</span></td>
           <td class="actions-cell">
             <button class="row-action" type="button" data-action="edit" data-id="${escapeHtml(listing.id)}" aria-label="Editar ${escapeHtml(listing.nombre)}">Editar</button>
-            <button class="row-action delete" type="button" data-action="delete" data-id="${escapeHtml(listing.id)}" aria-label="Eliminar ${escapeHtml(listing.nombre)}">Eliminar</button>
+            ${currentUser?.role === 'admin' ? `<button class="row-action delete" type="button" data-action="delete" data-id="${escapeHtml(listing.id)}" aria-label="Eliminar ${escapeHtml(listing.nombre)}">Eliminar</button>` : ''}
           </td>
         </tr>`,
     )
     .join('');
+}
+
+async function loadUsers() {
+  const target = document.querySelector('#user-table-body');
+  const error = document.querySelector('#user-form-error');
+  error.hidden = true;
+  setLoadingRow(target, 5, 'Cargando usuarios…');
+  try {
+    const result = await apiRequest('/admin/usuarios');
+    const users = Array.isArray(result?.data) ? result.data : null;
+    if (!users) throw new Error('La API devolvió una lista de usuarios no válida.');
+    if (!users.length) {
+      setLoadingRow(target, 5, 'No hay cuentas registradas.');
+      return;
+    }
+    target.innerHTML = users
+      .map((user) => `
+        <tr>
+          <td><div class="guest-cell"><strong>${escapeHtml(user.fullName || 'Sin nombre')}</strong><small>${escapeHtml(user.email)}</small></div></td>
+          <td>${escapeHtml(user.phone || '—')}</td>
+          <td>
+            <select class="user-role-select" data-user-id="${escapeHtml(user.id)}" aria-label="Rol de ${escapeHtml(user.email)}" ${user.id === currentUser?.id ? 'disabled' : ''}>
+              <option value="admin" ${user.role === 'admin' ? 'selected' : ''}>Administrador</option>
+              <option value="empleado" ${user.role === 'empleado' ? 'selected' : ''}>Empleado</option>
+              <option value="cliente" ${user.role === 'cliente' ? 'selected' : ''}>Cliente</option>
+            </select>
+          </td>
+          <td>${formatDate(user.createdAt)}</td>
+          <td><span class="status-badge ${user.emailConfirmed ? 'confirmada' : 'pendiente'}">${user.emailConfirmed ? 'Activo' : 'Pendiente'}</span></td>
+        </tr>`)
+      .join('');
+  } catch (requestError) {
+    setLoadingRow(target, 5, 'No se pudieron cargar los usuarios.');
+    error.textContent = requestError.message;
+    error.hidden = false;
+  }
 }
 
 async function loadBookings() {
@@ -327,14 +364,13 @@ function openCreateModal() {
     'Guardar alojamiento';
   resetFormError();
   listingModal.showModal();
-  listingForm.elements.proveedorId.focus();
+  listingForm.elements.nombre.focus();
 }
 
 function openEditModal(listing) {
   listingForm.reset();
   for (const field of [
     'id',
-    'proveedorId',
     'nombre',
     'tipo',
     'ciudad',
@@ -358,7 +394,7 @@ function openEditModal(listing) {
     'Guardar cambios';
   resetFormError();
   listingModal.showModal();
-  listingForm.elements.proveedorId.focus();
+  listingForm.elements.nombre.focus();
 }
 
 function setButtonBusy(button, busy, text) {
@@ -380,16 +416,20 @@ listingForm.addEventListener('submit', async (event) => {
 
   const formData = new FormData(listingForm);
   const id = String(formData.get('id') || '');
+  const latitud = String(formData.get('latitud') || '').trim();
+  const longitud = String(formData.get('longitud') || '').trim();
   const payload = {
-    proveedorId: String(formData.get('proveedorId')).trim(),
     nombre: String(formData.get('nombre')).trim(),
     tipo: formData.get('tipo'),
     ciudad: String(formData.get('ciudad')).trim(),
     direccion: String(formData.get('direccion')).trim(),
-    coordenadas: {
-      latitud: Number(formData.get('latitud')),
-      longitud: Number(formData.get('longitud')),
-    },
+    coordenadas:
+      latitud || longitud
+        ? {
+            ...(latitud ? { latitud: Number(latitud) } : {}),
+            ...(longitud ? { longitud: Number(longitud) } : {}),
+          }
+        : undefined,
     precioBaseNoche: Number(formData.get('precioBaseNoche')),
     moneda: String(formData.get('moneda')).trim().toUpperCase(),
     capacidadMaxima: Number(formData.get('capacidadMaxima')),
@@ -486,6 +526,55 @@ listingBody.addEventListener('click', (event) => {
 });
 
 document
+  .querySelector('#user-create-form')
+  .addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const error = document.querySelector('#user-form-error');
+    error.hidden = true;
+    if (!form.reportValidity()) return;
+    const button = form.querySelector('button[type="submit"]');
+    setButtonBusy(button, true, 'Creando cuenta…');
+    try {
+      await apiRequest('/admin/usuarios', {
+        method: 'POST',
+        body: JSON.stringify(Object.fromEntries(new FormData(form))),
+      });
+      form.reset();
+      form.elements.role.value = 'empleado';
+      showToast('Cuenta creada y activada correctamente.');
+      await loadUsers();
+    } catch (requestError) {
+      error.textContent = requestError.message;
+      error.hidden = false;
+    } finally {
+      setButtonBusy(button, false, 'Crear cuenta');
+    }
+  });
+
+document
+  .querySelector('#user-table-body')
+  .addEventListener('change', async (event) => {
+    const select = event.target.closest('.user-role-select');
+    if (!select || select.disabled) return;
+    select.disabled = true;
+    try {
+      await apiRequest(
+        `/admin/usuarios/${encodeURIComponent(select.dataset.userId)}/rol`,
+        {
+          method: 'PUT',
+          body: JSON.stringify({ role: select.value }),
+        },
+      );
+      showToast('Rol actualizado correctamente.');
+      await loadUsers();
+    } catch (requestError) {
+      showToast(requestError.message, true);
+      await loadUsers();
+    }
+  });
+
+document
   .querySelector('#listing-search')
   .addEventListener('input', renderListings);
 document
@@ -501,6 +590,7 @@ document
   .querySelector('#refresh-bookings')
   .addEventListener('click', loadBookings);
 document.querySelector('#refresh-events').addEventListener('click', loadEvents);
+document.querySelector('#refresh-users').addEventListener('click', loadUsers);
 
 document.querySelectorAll('[data-close]').forEach((button) => {
   button.addEventListener('click', () => {
@@ -559,21 +649,32 @@ async function initializeAdmin() {
       window.BookingAuth.goToLogin('/admin/');
       return;
     }
-    if (user.role !== 'admin') {
+    if (user.role !== 'admin' && user.role !== 'empleado') {
       window.location.replace('/marketplace/?accessDenied=admin');
       return;
     }
+    currentUser = user;
+    if (user.role === 'empleado') document.body.classList.add('employee-view');
 
     const profile = document.querySelector('.profile-link');
-    profile.querySelector('strong').textContent = user.email || 'Administrador';
-    profile.querySelector('small').textContent = 'Sesión de administrador';
+    profile.querySelector('strong').textContent =
+      user.fullName || user.email || 'Usuario';
+    profile.querySelector('small').textContent =
+      user.role === 'admin' ? 'Sesión de administrador' : 'Sesión de empleado';
+    document.querySelector('.welcome-row h1 em').textContent =
+      user.fullName?.split(/\s+/)[0] || user.role;
     document.querySelector('#logout-button').addEventListener('click', () => {
       window.BookingAuth.clearSession();
       window.location.assign('/marketplace/');
     });
     document.body.classList.remove('auth-pending');
     document.querySelector('#admin-auth-check').hidden = true;
-    await Promise.all([loadListings(), loadBookings(), loadEvents()]);
+    await Promise.all([
+      loadListings(),
+      ...(user.role === 'admin'
+        ? [loadBookings(), loadEvents(), loadUsers()]
+        : []),
+    ]);
   } catch (error) {
     console.error('No se pudo validar el acceso administrativo.', error);
     window.location.replace('/login/?next=%2Fadmin%2F');

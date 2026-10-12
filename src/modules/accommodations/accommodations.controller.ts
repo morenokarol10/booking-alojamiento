@@ -90,7 +90,7 @@ export class AccommodationsController {
 
   @Post()
   @UseGuards(SupabaseAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('admin', 'empleado')
   @ApiBearerAuth('supabase-jwt')
   @ApiUnauthorizedResponse({ description: 'Token ausente o no válido.' })
   @ApiForbiddenResponse({ description: 'Se requiere rol admin.' })
@@ -107,7 +107,7 @@ export class AccommodationsController {
 
   @Put(':id')
   @UseGuards(SupabaseAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('admin', 'empleado')
   @ApiBearerAuth('supabase-jwt')
   @ApiUnauthorizedResponse({ description: 'Token ausente o no válido.' })
   @ApiForbiddenResponse({ description: 'Se requiere rol admin.' })

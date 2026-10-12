@@ -21,28 +21,32 @@ import {
 export const ALOJAMIENTO_TIPOS = ['hotel', 'departamento', 'villa'] as const;
 
 export class CoordenadasDto {
-  @ApiProperty({ example: -0.2202, minimum: -90, maximum: 90 })
+  @ApiPropertyOptional({ example: -0.2202, minimum: -90, maximum: 90 })
+  @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @Min(-90)
   @Max(90)
-  latitud!: number;
+  latitud?: number;
 
-  @ApiProperty({ example: -78.5123, minimum: -180, maximum: 180 })
+  @ApiPropertyOptional({ example: -78.5123, minimum: -180, maximum: 180 })
+  @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @Min(-180)
   @Max(180)
-  longitud!: number;
+  longitud?: number;
 }
 
 export class CreateAlojamientoDto {
-  @ApiProperty({
+  @ApiPropertyOptional({
     format: 'uuid',
-    example: '20000000-0000-4000-8000-000000000001',
+    example: '967fd210-4ab8-4efe-81f6-5cfbbfdf20b5',
+    description: 'Si se omite, se asigna el proveedor predeterminado.',
   })
+  @IsOptional()
   @IsUUID()
-  proveedorId!: string;
+  proveedorId?: string;
 
   @ApiProperty({ example: 'Suite Familiar Quito', minLength: 3 })
   @IsString()
@@ -72,10 +76,14 @@ export class CreateAlojamientoDto {
   @MaxLength(240)
   direccion!: string;
 
-  @ApiProperty({ type: CoordenadasDto })
+  @ApiPropertyOptional({
+    type: CoordenadasDto,
+    description: 'Opcional; si se omite, se asignan coordenadas de Quito.',
+  })
+  @IsOptional()
   @ValidateNested()
   @Type(() => CoordenadasDto)
-  coordenadas!: CoordenadasDto;
+  coordenadas?: CoordenadasDto;
 
   @ApiProperty({ example: 85.5, minimum: 0 })
   @Type(() => Number)

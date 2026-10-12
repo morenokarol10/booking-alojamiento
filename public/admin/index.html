@@ -37,12 +37,15 @@
           <span class="nav-icon" aria-hidden="true">⌂</span> Alojamientos
           <span class="nav-count" id="nav-listing-count">—</span>
         </a>
-        <a class="side-link" href="#bookings">
+        <a class="side-link admin-only" href="#bookings">
           <span class="nav-icon" aria-hidden="true">▤</span> Reservas
           <span class="nav-count" id="nav-booking-count">—</span>
         </a>
-        <a class="side-link" href="#events">
+        <a class="side-link admin-only" href="#events">
           <span class="nav-icon" aria-hidden="true">⌁</span> Eventos EDA
+        </a>
+        <a class="side-link admin-only" href="#users">
+          <span class="nav-icon" aria-hidden="true">♙</span> Usuarios
         </a>
       </nav>
       <div class="sidebar-bottom">
@@ -121,7 +124,7 @@
           </button>
         </section>
 
-        <section class="stats-grid" aria-label="Resumen del sistema">
+        <section class="stats-grid admin-only" aria-label="Resumen del sistema">
           <article class="stat-card">
             <div class="stat-top">
               <span>Total de alojamientos</span
@@ -239,7 +242,65 @@
         </section>
 
         <section
-          class="data-section"
+          class="data-section admin-only"
+          id="users"
+          aria-labelledby="users-title"
+        >
+          <div class="section-heading">
+            <div class="section-title-group">
+              <div class="section-icon lilac" aria-hidden="true">♙</div>
+              <div>
+                <h2 id="users-title">Gestión de usuarios</h2>
+                <p>Crea cuentas y administra sus roles de acceso.</p>
+              </div>
+            </div>
+            <button class="button button-light" id="refresh-users" type="button">
+              <span aria-hidden="true">↻</span> Actualizar
+            </button>
+          </div>
+          <form id="user-create-form" class="user-create-form">
+            <label>Nombre completo
+              <input name="fullName" type="text" minlength="2" maxlength="160" required />
+            </label>
+            <label>Correo electrónico
+              <input name="email" type="email" required />
+            </label>
+            <label>Teléfono
+              <input name="phone" type="tel" minlength="5" maxlength="32" required />
+            </label>
+            <label>Contraseña temporal (mínimo 12 caracteres)
+              <input name="password" type="password" minlength="12" required />
+            </label>
+            <label>Rol
+              <select name="role" required>
+                <option value="empleado" selected>Empleado</option>
+                <option value="cliente">Cliente</option>
+                <option value="admin">Administrador</option>
+              </select>
+            </label>
+            <button class="button button-primary" type="submit">Crear cuenta</button>
+          </form>
+          <div class="inline-error" id="user-form-error" role="alert" hidden></div>
+          <div class="table-shell">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th scope="col">USUARIO</th>
+                  <th scope="col">TELÉFONO</th>
+                  <th scope="col">ROL</th>
+                  <th scope="col">REGISTRO</th>
+                  <th scope="col">CORREO</th>
+                </tr>
+              </thead>
+              <tbody id="user-table-body">
+                <tr><td colspan="5" class="loading-cell">Cargando usuarios…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section
+          class="data-section admin-only"
           id="bookings"
           aria-labelledby="bookings-title"
         >
@@ -292,7 +353,7 @@
         </section>
 
         <section
-          class="data-section events-section"
+          class="data-section events-section admin-only"
           id="events"
           aria-labelledby="events-title"
         >
@@ -382,16 +443,6 @@
         <input type="hidden" name="id" />
         <div class="form-grid">
           <label class="form-field full-field"
-            >Proveedor UUID <span class="required">*</span>
-            <input
-              name="proveedorId"
-              type="text"
-              required
-              pattern="[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}"
-              placeholder="UUID del proveedor"
-            />
-          </label>
-          <label class="form-field full-field"
             >Nombre del alojamiento <span class="required">*</span>
             <input
               name="nombre"
@@ -435,11 +486,10 @@
             />
           </label>
           <label class="form-field"
-            >Latitud <span class="required">*</span>
+            >Latitud <span class="optional-label">Opcional; valor predeterminado Quito</span>
             <input
               name="latitud"
               type="number"
-              required
               min="-90"
               max="90"
               step="any"
@@ -447,11 +497,10 @@
             />
           </label>
           <label class="form-field"
-            >Longitud <span class="required">*</span>
+            >Longitud <span class="optional-label">Opcional; valor predeterminado Quito</span>
             <input
               name="longitud"
               type="number"
-              required
               min="-180"
               max="180"
               step="any"

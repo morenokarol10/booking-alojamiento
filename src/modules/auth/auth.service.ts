@@ -15,6 +15,7 @@ import {
 import type { AuthenticatedUser, UserRole } from './auth.types';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 
 @Injectable()
 export class AuthService {
@@ -110,9 +111,46 @@ export class AuthService {
     return { data: user, message: 'Sesión válida.' };
   }
 
+  async updateProfile(user: AuthenticatedUser, dto: UpdateProfileDto) {
+    const { data, error } = await this.adminSupabase.auth.admin.updateUserById(
+      user.id,
+      {
+        email: dto.email.trim(),
+        email_confirm: true,
+        user_metadata: {
+          role: user.role,
+          full_name: dto.fullName.trim(),
+          phone: dto.phone.trim(),
+        },
+      },
+    );
+    if (error) {
+      this.logger.warn(
+        `No se pudo actualizar el perfil ${user.id} (código: ${error.code ?? 'desconocido'}).`,
+      );
+      throw new BadRequestException(
+        'No se pudo actualizar el perfil. Verifica que el correo no esté en uso e inténtalo de nuevo.',
+      );
+    }
+    if (!data.user) {
+      throw new InternalServerErrorException(
+        'Supabase no devolvió el usuario actualizado.',
+      );
+    }
+
+    return {
+      data: this.mapUser(data.user),
+      message: 'Perfil actualizado correctamente.',
+    };
+  }
+
   private mapUser(user: User): AuthenticatedUser {
     const role: UserRole =
-      user.app_metadata?.role === 'admin' ? 'admin' : 'cliente';
+      user.app_metadata?.role === 'admin'
+        ? 'admin'
+        : user.app_metadata?.role === 'empleado'
+          ? 'empleado'
+          : 'cliente';
     const fullName = this.metadataString(user.user_metadata, [
       'full_name',
       'fullName',

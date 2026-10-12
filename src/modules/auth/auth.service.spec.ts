@@ -73,6 +73,55 @@ describe('AuthService', () => {
     expect(response.data.session.accessToken).toBe('access-token');
   });
 
+  it('updates profile metadata without changing the trusted app role', async () => {
+    const updateUserById = jest.fn().mockResolvedValue({
+      data: {
+        user: {
+          id: '50000000-0000-4000-8000-000000000001',
+          email: 'nuevo@example.com',
+          app_metadata: { role: 'empleado' },
+          user_metadata: {
+            full_name: 'Nombre Actualizado',
+            phone: '+593991111111',
+          },
+        },
+      },
+      error: null,
+    });
+    const service = makeService({}, { updateUserById });
+
+    const response = await service.updateProfile(
+      {
+        id: '50000000-0000-4000-8000-000000000001',
+        email: 'anterior@example.com',
+        role: 'empleado',
+      },
+      {
+        fullName: 'Nombre Actualizado',
+        email: 'nuevo@example.com',
+        phone: '+593991111111',
+      },
+    );
+
+    expect(updateUserById).toHaveBeenCalledWith(
+      '50000000-0000-4000-8000-000000000001',
+      expect.objectContaining({
+        email: 'nuevo@example.com',
+        email_confirm: true,
+        user_metadata: {
+          role: 'empleado',
+          full_name: 'Nombre Actualizado',
+          phone: '+593991111111',
+        },
+      }),
+    );
+    expect(response.data).toMatchObject({
+      role: 'empleado',
+      fullName: 'Nombre Actualizado',
+      phone: '+593991111111',
+    });
+  });
+
   it('uses Supabase signUp with cliente metadata when auto-confirm is disabled', async () => {
     const signUp = jest.fn().mockResolvedValue({
       data: {

@@ -77,12 +77,13 @@ async function submitAuth(form, path, successText) {
       requestedNext?.startsWith('/') && !requestedNext.startsWith('//')
         ? requestedNext
         : '/marketplace/';
-    if (next.startsWith('/admin/') && user.role !== 'admin') {
+    const isStaff = user.role === 'admin' || user.role === 'empleado';
+    if (next.startsWith('/admin/') && !isStaff) {
       window.location.assign('/marketplace/?accessDenied=1');
       return;
     }
     window.location.assign(
-      user.role === 'admin' && next === '/marketplace/' ? '/admin/' : next,
+      isStaff && next === '/marketplace/' ? '/admin/' : next,
     );
   } catch (error) {
     showNotice(error.message || 'No se pudo conectar con el servidor.', true);

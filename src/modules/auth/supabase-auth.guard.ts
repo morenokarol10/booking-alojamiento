@@ -30,8 +30,9 @@ export class SupabaseAuthGuard implements CanActivate {
       throw new UnauthorizedException('El token de acceso no es válido.');
     }
 
+    const appRole = data.user.app_metadata?.role;
     const role: UserRole =
-      data.user.app_metadata?.role === 'admin' ? 'admin' : 'cliente';
+      appRole === 'admin' || appRole === 'empleado' ? appRole : 'cliente';
     const metadata = data.user.user_metadata;
     const fullName = this.metadataString(metadata, [
       'full_name',

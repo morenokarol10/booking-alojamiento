@@ -13,26 +13,43 @@ const DEFAULT_COORDINATES: CoordenadasEntity = {
   latitud: -0.1807,
   longitud: -78.4678,
 };
+const DEFAULT_PROVIDER_ID = '967fd210-4ab8-4efe-81f6-5cfbbfdf20b5';
 
 export function toAlojamientoDatabase(
   dto: CreateAlojamientoDto | UpdateAlojamientoDto,
+  isCreate = false,
 ): Record<string, unknown> {
   const record: Record<string, unknown> = {};
-  if (dto.proveedorId !== undefined) record.proveedor_id = dto.proveedorId;
+  if (dto.proveedorId !== undefined) {
+    record.proveedor_id = dto.proveedorId;
+  } else if (isCreate) {
+    record.proveedor_id = DEFAULT_PROVIDER_ID;
+  }
   if (dto.nombre !== undefined) record.nombre = dto.nombre;
   if (dto.descripcion !== undefined) record.descripcion = dto.descripcion;
   if (dto.tipo !== undefined) record.tipo = dto.tipo;
   if (dto.ciudad !== undefined) record.ciudad = dto.ciudad;
   if (dto.direccion !== undefined) record.direccion = dto.direccion;
   if (dto.coordenadas !== undefined) {
-    record.latitud = toFiniteNumber(
-      dto.coordenadas.latitud,
-      'coordenadas.latitud',
-    );
-    record.longitud = toFiniteNumber(
-      dto.coordenadas.longitud,
-      'coordenadas.longitud',
-    );
+    if (dto.coordenadas.latitud !== undefined) {
+      record.latitud = toFiniteNumber(
+        dto.coordenadas.latitud,
+        'coordenadas.latitud',
+      );
+    } else if (isCreate) {
+      record.latitud = DEFAULT_COORDINATES.latitud;
+    }
+    if (dto.coordenadas.longitud !== undefined) {
+      record.longitud = toFiniteNumber(
+        dto.coordenadas.longitud,
+        'coordenadas.longitud',
+      );
+    } else if (isCreate) {
+      record.longitud = DEFAULT_COORDINATES.longitud;
+    }
+  } else if (isCreate) {
+    record.latitud = DEFAULT_COORDINATES.latitud;
+    record.longitud = DEFAULT_COORDINATES.longitud;
   }
   if (dto.precioBaseNoche !== undefined) {
     record.precio_base_noche = toFiniteNumber(

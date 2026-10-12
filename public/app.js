@@ -27,6 +27,8 @@ const successMessage = document.querySelector('#success-message');
 const myBookingsDialog = document.querySelector('#my-bookings-dialog');
 const myBookingsList = document.querySelector('#my-bookings-list');
 const myBookingsStatus = document.querySelector('#my-bookings-status');
+const profileForm = document.querySelector('#profile-form');
+const profileStatus = document.querySelector('#profile-status');
 const toast = document.querySelector('#toast');
 let toastTimeout;
 let currentListings = [];
@@ -262,8 +264,20 @@ async function loadMyBookings() {
   }
 
   myBookingsStatus.textContent = 'Cargando tus reservas…';
+  profileStatus.textContent = 'Cargando tu perfil…';
   myBookingsList.replaceChildren();
   try {
+    const user = await window.BookingAuth.fetchProfile();
+    if (!user) {
+      myBookingsDialog.close();
+      window.BookingAuth.goToLogin('/marketplace/');
+      return;
+    }
+    profileForm.elements.fullName.value = user.fullName || '';
+    profileForm.elements.email.value = user.email || '';
+    profileForm.elements.phone.value = user.phone || '';
+    profileStatus.textContent = '';
+
     const response = await fetch(`${API_BASE}/reservas/mis-reservas`, {
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -310,8 +324,49 @@ async function loadMyBookings() {
   } catch (error) {
     myBookingsStatus.textContent =
       error.message || 'No se pudieron cargar tus reservas.';
+    profileStatus.textContent = error.message || 'No se pudo cargar tu perfil.';
   }
 }
+
+profileForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  if (!profileForm.reportValidity()) return;
+  const button = profileForm.querySelector('button[type="submit"]');
+  const originalText = button.textContent;
+  button.disabled = true;
+  button.textContent = 'Guardando…';
+  profileStatus.textContent = '';
+  try {
+    const result = await fetch(`${API_BASE}/auth/me`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${window.BookingAuth.token()}`,
+      },
+      body: JSON.stringify(Object.fromEntries(new FormData(profileForm))),
+    });
+    if (result.status === 401) {
+      window.BookingAuth.clearSession();
+      myBookingsDialog.close();
+      window.BookingAuth.goToLogin('/marketplace/');
+      return;
+    }
+    const body = await readResponse(result);
+    window.BookingAuth.saveSession(
+      { accessToken: window.BookingAuth.token() },
+      body.data,
+    );
+    profileStatus.textContent = 'Perfil actualizado correctamente.';
+    const accountName = document.querySelector('#my-bookings-link');
+    accountName.textContent = body.data.fullName || 'Mi Perfil';
+  } catch (error) {
+    profileStatus.textContent =
+      error.message || 'No se pudo actualizar tu perfil.';
+  } finally {
+    button.disabled = false;
+    button.textContent = originalText;
+  }
+});
 
 async function submitBooking(event) {
   event.preventDefault();
@@ -380,8 +435,13 @@ async function initializeMarketplace() {
     try {
       const user = await window.BookingAuth.fetchProfile();
       if (user) {
-        if (user.role === 'admin') adminLink.hidden = false;
+        if (user.role === 'admin' || user.role === 'empleado') {
+          adminLink.hidden = false;
+        }
         myBookingsLink.hidden = user.role !== 'cliente';
+        if (user.role === 'cliente') {
+          myBookingsLink.textContent = user.fullName || 'Mi Perfil';
+        }
       }
       if (user) {
         accountLink.textContent = 'Cerrar sesión';
@@ -450,6 +510,12 @@ async function openBookingDetails(listing) {
     }
     if (user.role !== 'cliente') {
       showToast('Inicia sesión con una cuenta de cliente para reservar.');
+      return;
+    }
+    if (!user.fullName || !user.email || !user.phone) {
+      showToast(
+        'Completa tu nombre, correo y teléfono desde Mi Perfil antes de reservar.',
+      );
       return;
     }
     selectedListing = listing;

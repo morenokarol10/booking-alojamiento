@@ -96,6 +96,9 @@ input:focus-visible {
 #admin-mode-link[hidden] {
   display: none !important;
 }
+#favorites-link[hidden] {
+  display: none !important;
+}
 
 .hero {
   position: relative;

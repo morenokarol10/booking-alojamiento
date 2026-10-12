@@ -125,7 +125,7 @@ function renderListings(listings) {
           <div class="card-image-wrap">
             <img class="card-image" src="${escapeHtml(imageFor(listing))}" alt="${escapeHtml(listing.nombre)}" loading="${index < 4 ? 'eager' : 'lazy'}" />
             <span class="type-pill">${escapeHtml(TYPE_LABELS[listing.tipo] || listing.tipo)}</span>
-            <button class="favorite-mark${favoriteIds.has(listing.id) ? ' is-favorite' : ''}" type="button" data-favorite-id="${escapeHtml(listing.id)}" aria-label="${favoriteIds.has(listing.id) ? 'Quitar de favoritos' : 'Añadir a favoritos'}" aria-pressed="${favoriteIds.has(listing.id)}">♥</button>
+            ${currentUser?.role === 'cliente' ? `<button class="favorite-mark${favoriteIds.has(listing.id) ? ' is-favorite' : ''}" type="button" data-favorite-id="${escapeHtml(listing.id)}" aria-label="${favoriteIds.has(listing.id) ? 'Quitar de favoritos' : 'Añadir a favoritos'}" aria-pressed="${favoriteIds.has(listing.id)}">♥</button>` : ''}
           </div>
           <div class="card-info">
             <div class="card-title-line">
@@ -562,10 +562,12 @@ async function initializeMarketplace() {
   const adminLink = document.querySelector('#admin-mode-link');
   const profileLink = document.querySelector('#profile-link');
   const myBookingsLink = document.querySelector('#my-bookings-link');
+  const favoritesLink = document.querySelector('#favorites-link');
   const accountLink = document.querySelector('#account-link');
   adminLink.hidden = true;
   profileLink.hidden = true;
   myBookingsLink.hidden = true;
+  favoritesLink.hidden = true;
   favoriteIds = new Set();
   currentUser = null;
   const token = window.BookingAuth.token();
@@ -580,6 +582,7 @@ async function initializeMarketplace() {
         profileLink.hidden = user.role !== 'cliente';
         myBookingsLink.hidden = user.role !== 'cliente';
         if (user.role === 'cliente') {
+          favoritesLink.hidden = false;
           try {
             await refreshFavoriteIds();
           } catch (error) {

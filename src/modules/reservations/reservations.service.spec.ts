@@ -78,6 +78,63 @@ describe('ReservationsService payment and event flow', () => {
     ).rejects.toThrow(/nombre completo, correo y teléfono/i);
   });
 
+  it('explains how to repair Supabase when reservas.cliente_id is missing', async () => {
+    const accommodation = {
+      id: '10000000-0000-4000-8000-000000000001',
+      precio_base_noche: 85,
+      moneda: 'USD',
+      capacidad_maxima: 4,
+      habitaciones_disponibles: 1,
+    };
+    const missingClientColumnError = {
+      code: 'PGRST204',
+      message:
+        "Could not find the 'cliente_id' column of 'reservas' in the schema cache",
+    };
+    let reservationQueryCount = 0;
+    const supabaseStub = {
+      from: (table: string) => {
+        if (table === 'alojamientos') {
+          return new QueryMock({ data: accommodation, error: null }, () => ({
+            data: null,
+            error: null,
+          }));
+        }
+        reservationQueryCount += 1;
+        if (reservationQueryCount === 1) {
+          return new QueryMock({ data: [], error: null }, () => ({
+            data: null,
+            error: null,
+          }));
+        }
+        return new QueryMock(
+          { data: null, error: missingClientColumnError },
+          () => ({ data: null, error: missingClientColumnError }),
+        );
+      },
+    } as unknown as SupabaseClient;
+    const service = new ReservationsService(supabaseStub);
+
+    await expect(
+      service.create(
+        {
+          alojamientoId: accommodation.id,
+          fechaCheckin: '2026-11-10',
+          fechaCheckout: '2026-11-13',
+          numHuespedes: 2,
+          metodoPagoSimulado: 'tarjeta',
+        },
+        {
+          id: '50000000-0000-4000-8000-000000000001',
+          email: 'maria@example.com',
+          role: 'cliente',
+          fullName: 'María Pérez',
+          phone: '+593991234567',
+        },
+      ),
+    ).rejects.toThrow('20261011_booking_admin_schema.sql');
+  });
+
   it('supports multiple reservations and writes one EDA event per successful reservation', async () => {
     const inserts: Record<string, unknown[]> = {
       reservas: [],

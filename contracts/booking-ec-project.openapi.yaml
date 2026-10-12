@@ -1,0 +1,491 @@
+openapi: 3.0.3
+info:
+  title: Booking EC - API del Proyecto
+  version: 1.0.0
+  description: >-
+    Contrato de la API REST propia del proyecto académico Booking EC.
+    Es independiente del contrato GDS de integración alojamientos-openapi.yaml.
+servers:
+  - url: https://booking-alojamiento.onrender.com/api/v1
+    description: Despliegue Render del proyecto (verificar disponibilidad)
+  - url: http://localhost:3000/api/v1
+    description: Desarrollo local
+tags:
+  - name: Autenticación
+  - name: Alojamientos
+  - name: Reservas
+  - name: Administración
+security:
+  - supabase-jwt: []
+paths:
+  /auth/register:
+    post:
+      tags: [Autenticación]
+      summary: Registrar una cuenta de cliente
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: Cuenta creada; puede iniciar sesión según la configuración de Auth.
+        '400':
+          $ref: '#/components/responses/Error'
+  /auth/login:
+    post:
+      tags: [Autenticación]
+      summary: Iniciar sesión con Supabase Auth
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Sesión iniciada.
+        '401':
+          $ref: '#/components/responses/Error'
+  /auth/me:
+    get:
+      tags: [Autenticación]
+      summary: Consultar perfil del usuario autenticado
+      responses:
+        '200':
+          description: Perfil y rol del usuario autenticado.
+        '401':
+          $ref: '#/components/responses/Error'
+    put:
+      tags: [Autenticación]
+      summary: Actualizar nombre, correo y teléfono del usuario autenticado
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfileUpdate'
+      responses:
+        '200':
+          description: Perfil actualizado.
+        '400':
+          $ref: '#/components/responses/Error'
+  /alojamientos:
+    get:
+      tags: [Alojamientos]
+      summary: Listar alojamientos con filtros opcionales
+      security: []
+      parameters:
+        - name: ciudad
+          in: query
+          schema:
+            type: string
+        - name: precioMaximo
+          in: query
+          schema:
+            type: number
+            minimum: 0
+      responses:
+        '200':
+          description: Colección de alojamientos.
+    post:
+      tags: [Alojamientos]
+      summary: Crear alojamiento (admin o empleado)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AlojamientoCreate'
+      responses:
+        '201':
+          description: Alojamiento creado.
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+  /alojamientos/{id}:
+    parameters:
+      - $ref: '#/components/parameters/UuidId'
+    get:
+      tags: [Alojamientos]
+      summary: Consultar alojamiento
+      security: []
+      responses:
+        '200':
+          description: Detalle del alojamiento.
+        '404':
+          $ref: '#/components/responses/Error'
+    put:
+      tags: [Alojamientos]
+      summary: Actualizar alojamiento (admin o empleado)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AlojamientoUpdate'
+      responses:
+        '200':
+          description: Alojamiento actualizado.
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+    delete:
+      tags: [Alojamientos]
+      summary: Eliminar alojamiento (solo admin)
+      responses:
+        '200':
+          description: Alojamiento eliminado.
+        '403':
+          $ref: '#/components/responses/Error'
+  /reservas:
+    post:
+      tags: [Reservas]
+      summary: Crear reserva para el cliente autenticado
+      description: El ID y los datos de contacto del cliente se obtienen de la sesión, no del cuerpo.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReservaCreate'
+      responses:
+        '201':
+          description: Reserva creada; pago de demostración, no real. Puede incluir warning si falla la bitácora.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReservaCreatedResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+    get:
+      tags: [Reservas]
+      summary: Listar todas las reservas (solo admin)
+      responses:
+        '200':
+          description: Lista administrativa de reservas.
+        '403':
+          $ref: '#/components/responses/Error'
+  /reservas/mis-reservas:
+    get:
+      tags: [Reservas]
+      summary: Listar reservas del cliente autenticado
+      responses:
+        '200':
+          description: Lista de reservas propias.
+        '401':
+          $ref: '#/components/responses/Error'
+  /reservas/{id}/cancelar:
+    post:
+      tags: [Reservas]
+      summary: Cancelar una reserva futura propia
+      description: >-
+        La interfaz acepta únicamente la tarjeta sandbox 4242 4242 4242 4242,
+        verifica localmente la fecha y el CVC y no envía ni almacena esos datos.
+        La devolución es simulada y no procesa dinero real.
+      parameters:
+        - $ref: '#/components/parameters/UuidId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReservaCancel'
+      responses:
+        '200':
+          description: Reserva cancelada y devolución de demostración registrada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReservaCancellationResponse'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+  /admin/usuarios:
+    get:
+      tags: [Administración]
+      summary: Listar cuentas (solo admin)
+      responses:
+        '200':
+          description: Cuentas y roles.
+        '403':
+          $ref: '#/components/responses/Error'
+    post:
+      tags: [Administración]
+      summary: Crear cuenta administrada (solo admin)
+      responses:
+        '201':
+          description: Cuenta creada.
+        '403':
+          $ref: '#/components/responses/Error'
+  /admin/usuarios/{id}/rol:
+    put:
+      tags: [Administración]
+      summary: Actualizar rol (solo admin)
+      parameters:
+        - $ref: '#/components/parameters/UuidId'
+      responses:
+        '200':
+          description: Rol actualizado.
+        '403':
+          $ref: '#/components/responses/Error'
+  /admin/eventos:
+    get:
+      tags: [Administración]
+      summary: Consultar bitácora de eventos (solo admin)
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+      responses:
+        '200':
+          description: Eventos recientes.
+        '403':
+          $ref: '#/components/responses/Error'
+components:
+  securitySchemes:
+    supabase-jwt:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    UuidId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  responses:
+    Error:
+      description: Error de validación, autenticación, autorización o negocio.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              statusCode:
+                type: integer
+              message:
+                oneOf:
+                  - type: string
+                  - type: array
+                    items:
+                      type: string
+              error:
+                type: string
+  schemas:
+    RegisterRequest:
+      type: object
+      required: [fullName, phone, email, password]
+      properties:
+        fullName:
+          type: string
+          minLength: 2
+          maxLength: 160
+        phone:
+          type: string
+          minLength: 5
+          maxLength: 32
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 12
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+    ProfileUpdate:
+      type: object
+      required: [fullName, email, phone]
+      properties:
+        fullName:
+          type: string
+          minLength: 2
+          maxLength: 160
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+          minLength: 5
+          maxLength: 32
+    ReservaCreate:
+      type: object
+      required: [alojamientoId, fechaCheckin, fechaCheckout, numHuespedes, metodoPagoSimulado]
+      properties:
+        alojamientoId:
+          type: string
+          format: uuid
+        fechaCheckin:
+          type: string
+          format: date
+        fechaCheckout:
+          type: string
+          format: date
+        numHuespedes:
+          type: integer
+          minimum: 1
+        metodoPagoSimulado:
+          type: string
+          maxLength: 60
+          description: Valor ilustrativo, no procesa un pago real.
+    ReservaCancel:
+      type: object
+      required: [confirmacionPagoSimulado]
+      properties:
+        confirmacionPagoSimulado:
+          type: boolean
+          enum: [true]
+          description: Confirmación de validación local de tarjeta sandbox; no incluye datos de tarjeta.
+    ReservaCreatedResponse:
+      type: object
+      required: [data, pago, message]
+      properties:
+        data:
+          type: object
+          description: Reserva creada.
+        pago:
+          type: object
+          properties:
+            estado:
+              type: string
+              enum: [exitoso]
+            referencia:
+              type: string
+              format: uuid
+            simulado:
+              type: boolean
+              enum: [true]
+        message:
+          type: string
+        warning:
+          type: string
+    ReservaCancellationResponse:
+      type: object
+      required: [data, pagoCancelacion, message]
+      properties:
+        data:
+          type: object
+          description: Reserva actualizada con estado cancelada.
+        pagoCancelacion:
+          type: object
+          properties:
+            estado:
+              type: string
+              enum: [simulado]
+            referencia:
+              type: string
+              format: uuid
+            simulado:
+              type: boolean
+              enum: [true]
+        message:
+          type: string
+        warning:
+          type: string
+    AlojamientoCreate:
+      type: object
+      required: [nombre, tipo, ciudad, direccion, precioBaseNoche, capacidadMaxima, habitacionesDisponibles, imagenes]
+      properties:
+        proveedorId:
+          type: string
+          format: uuid
+        nombre:
+          type: string
+        tipo:
+          type: string
+          enum: [hotel, departamento, villa]
+        ciudad:
+          type: string
+        direccion:
+          type: string
+        coordenadas:
+          type: object
+          properties:
+            latitud:
+              type: number
+            longitud:
+              type: number
+        precioBaseNoche:
+          type: number
+          minimum: 0
+        capacidadMaxima:
+          type: integer
+          minimum: 1
+        habitacionesDisponibles:
+          type: integer
+          minimum: 0
+        servicios:
+          type: array
+          items:
+            type: string
+        imagenes:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            format: uri
+    AlojamientoUpdate:
+      type: object
+      minProperties: 1
+      description: Actualización parcial; todos los campos son opcionales.
+      properties:
+        proveedorId:
+          type: string
+          format: uuid
+        nombre:
+          type: string
+        descripcion:
+          type: string
+        tipo:
+          type: string
+          enum: [hotel, departamento, villa]
+        ciudad:
+          type: string
+        direccion:
+          type: string
+        coordenadas:
+          type: object
+          properties:
+            latitud:
+              type: number
+            longitud:
+              type: number
+        precioBaseNoche:
+          type: number
+          minimum: 0
+        capacidadMaxima:
+          type: integer
+          minimum: 1
+        habitacionesDisponibles:
+          type: integer
+          minimum: 0
+        servicios:
+          type: array
+          items:
+            type: string
+        imagenes:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            format: uri

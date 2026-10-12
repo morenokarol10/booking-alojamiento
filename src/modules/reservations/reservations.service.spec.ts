@@ -41,6 +41,11 @@ class QueryMock {
     return this;
   }
 
+  update(value: unknown): this {
+    this.result = this.onInsert(value);
+    return this;
+  }
+
   maybeSingle(): Promise<QueryResult> {
     return Promise.resolve(this.result);
   }
@@ -272,5 +277,122 @@ describe('ReservationsService payment and event flow', () => {
       alojamiento: { nombre: 'Suite Quito', ciudad: 'Quito' },
       clienteNombre: 'María Pérez',
     });
+  });
+
+  it('cancels a future reservation owned by the customer and records a simulated refund', async () => {
+    const customerId = '50000000-0000-4000-8000-000000000001';
+    const reservationId = '40000000-0000-4000-8000-000000000001';
+    const updateValues: unknown[] = [];
+    const eventInserts: unknown[] = [];
+    let reservationQueryCount = 0;
+    const updatedReservation = {
+      id: reservationId,
+      alojamiento_id: '10000000-0000-4000-8000-000000000001',
+      cliente_nombre: 'María Pérez',
+      cliente_email: 'maria@example.com',
+      cliente_telefono: '+593991234567',
+      fecha_checkin: '2099-11-10',
+      fecha_checkout: '2099-11-13',
+      num_huespedes: 2,
+      precio_total: 255,
+      moneda: 'USD',
+      metodo_pago_simulado: 'tarjeta',
+      pago_estado: 'exitoso',
+      pago_referencia: '30000000-0000-4000-8000-000000000001',
+      estado: 'cancelada',
+      created_at: '2026-10-07T00:00:00.000Z',
+    };
+    const supabaseStub = {
+      from: (table: string) => {
+        if (table === 'reservas') {
+          reservationQueryCount += 1;
+          if (reservationQueryCount === 1) {
+            return new QueryMock(
+              {
+                data: {
+                  id: reservationId,
+                  estado: 'confirmada',
+                  fecha_checkin: '2099-11-10',
+                },
+                error: null,
+              },
+              () => ({ data: null, error: null }),
+            );
+          }
+          return new QueryMock(
+            { data: updatedReservation, error: null },
+            (value) => {
+              updateValues.push(value);
+              return { data: updatedReservation, error: null };
+            },
+          );
+        }
+        if (table === 'eventos_log') {
+          return {
+            insert: (value: unknown) => {
+              eventInserts.push(value);
+              return Promise.resolve({ data: null, error: null });
+            },
+          };
+        }
+        throw new Error(`Unexpected Supabase table: ${table}`);
+      },
+    } as unknown as SupabaseClient;
+    const service = new ReservationsService(supabaseStub);
+
+    const response = await service.cancel(
+      reservationId,
+      { confirmacionPagoSimulado: true },
+      {
+        id: customerId,
+        email: 'maria@example.com',
+        role: 'cliente',
+      },
+    );
+
+    expect(updateValues).toEqual([{ estado: 'cancelada' }]);
+    expect(eventInserts[0]).toMatchObject({
+      tipo_evento: 'ReservaCanceladaEvent',
+      payload: {
+        eventType: 'ReservaCanceladaEvent',
+        data: {
+          reservaId: reservationId,
+          clienteId: customerId,
+          pagoCancelacion: { estado: 'simulado' },
+        },
+      },
+    });
+    expect(JSON.stringify(eventInserts)).not.toMatch(/cardNumber|cvc|4242/);
+    expect(response).toMatchObject({
+      data: { id: reservationId, estado: 'cancelada' },
+      pagoCancelacion: { estado: 'simulado', simulado: true },
+    });
+  });
+
+  it('does not reveal or cancel a reservation that does not belong to the customer', async () => {
+    const supabaseStub = {
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            eq: () => ({
+              maybeSingle: async () => ({ data: null, error: null }),
+            }),
+          }),
+        }),
+      }),
+    } as unknown as SupabaseClient;
+    const service = new ReservationsService(supabaseStub);
+
+    await expect(
+      service.cancel(
+        '40000000-0000-4000-8000-000000000001',
+        { confirmacionPagoSimulado: true },
+        {
+          id: '50000000-0000-4000-8000-000000000001',
+          email: 'maria@example.com',
+          role: 'cliente',
+        },
+      ),
+    ).rejects.toThrow(/no se encontró una reserva cancelable/i);
   });
 });

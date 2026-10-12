@@ -1,19 +1,24 @@
 import { randomUUID } from 'node:crypto';
 import {
   BadRequestException,
+  ConflictException,
   Inject,
   Injectable,
   InternalServerErrorException,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { SUPABASE_CLIENT } from '../../supabase/supabase.module';
 import { CreateReservaDto } from './dto/create-reserva.dto';
+import { CancelReservaDto } from './dto/cancel-reserva.dto';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { toReservaDatabase, toReservaEntity } from './entities/reserva.mapper';
 
 @Injectable()
 export class ReservationsService {
+  private readonly logger = new Logger(ReservationsService.name);
+
   constructor(
     @Inject(SUPABASE_CLIENT) private readonly supabase: SupabaseClient,
   ) {}
@@ -129,13 +134,13 @@ export class ReservationsService {
         payload: eventPayload,
       });
 
+    const warning = eventError
+      ? 'La reserva quedó registrada, pero el evento no pudo guardarse. Contacta al soporte si no aparece en el panel.'
+      : undefined;
     if (eventError) {
-      throw new InternalServerErrorException({
-        statusCode: 500,
-        message:
-          'La reserva quedó registrada, pero no se pudo emitir el evento asociado.',
-        error: eventError.message,
-      });
+      this.logger.error(
+        `Reserva ${reservaEntity.id} guardada sin evento (código: ${eventError.code ?? 'desconocido'}).`,
+      );
     }
 
     return {
@@ -145,7 +150,112 @@ export class ReservationsService {
         referencia: pagoReferencia,
         simulado: true,
       },
-      message: 'Reserva confirmada y evento registrado correctamente.',
+      message: warning
+        ? 'Reserva confirmada con una advertencia de registro.'
+        : 'Reserva confirmada y evento registrado correctamente.',
+      ...(warning ? { warning } : {}),
+    };
+  }
+
+  async cancel(
+    reservationId: string,
+    dto: CancelReservaDto,
+    user: AuthenticatedUser,
+  ) {
+    if (dto.confirmacionPagoSimulado !== true) {
+      throw new BadRequestException(
+        'Debes confirmar la validación de pago simulado.',
+      );
+    }
+
+    const { data: existing, error: lookupError } = await this.supabase
+      .from('reservas')
+      .select('id, estado, fecha_checkin')
+      .eq('id', reservationId)
+      .eq('cliente_id', user.id)
+      .maybeSingle();
+    if (lookupError) {
+      throw new InternalServerErrorException({
+        statusCode: 500,
+        message: 'No se pudo consultar la reserva para cancelarla.',
+        error: lookupError.message,
+      });
+    }
+    if (!existing) {
+      throw new NotFoundException('No se encontró una reserva cancelable.');
+    }
+    if (
+      existing.estado !== 'confirmada' ||
+      typeof existing.fecha_checkin !== 'string' ||
+      existing.fecha_checkin <= new Date().toISOString().slice(0, 10)
+    ) {
+      throw new ConflictException(
+        'Solo se pueden cancelar reservas confirmadas cuya fecha de inicio aún no llega.',
+      );
+    }
+
+    const { data: reservation, error: updateError } = await this.supabase
+      .from('reservas')
+      .update({ estado: 'cancelada' })
+      .eq('id', reservationId)
+      .eq('cliente_id', user.id)
+      .eq('estado', 'confirmada')
+      .select('*')
+      .maybeSingle();
+    if (updateError) {
+      throw new InternalServerErrorException({
+        statusCode: 500,
+        message: 'No se pudo cancelar la reserva.',
+        error: updateError.message,
+      });
+    }
+    if (!reservation) {
+      throw new ConflictException(
+        'La reserva cambió de estado y ya no se puede cancelar.',
+      );
+    }
+
+    const cancellationReference = randomUUID();
+    const reservationEntity = toReservaEntity(reservation);
+    const eventPayload = {
+      eventId: randomUUID(),
+      eventType: 'ReservaCanceladaEvent',
+      occurredAt: new Date().toISOString(),
+      data: {
+        reservaId: reservationId,
+        clienteId: user.id,
+        pagoCancelacion: {
+          estado: 'simulado',
+          referencia: cancellationReference,
+        },
+      },
+    };
+    const { error: eventError } = await this.supabase
+      .from('eventos_log')
+      .insert({
+        tipo_evento: 'ReservaCanceladaEvent',
+        payload: eventPayload,
+      });
+
+    const warning = eventError
+      ? 'La cancelación se guardó, pero no se pudo registrar su evento.'
+      : undefined;
+    if (eventError) {
+      this.logger.error(
+        `Reserva ${reservationId} cancelada sin evento (código: ${eventError.code ?? 'desconocido'}).`,
+      );
+    }
+
+    return {
+      data: reservationEntity,
+      pagoCancelacion: {
+        estado: 'simulado',
+        referencia: cancellationReference,
+        simulado: true,
+      },
+      message:
+        'Reserva cancelada. No se procesó una transacción ni una devolución real.',
+      ...(warning ? { warning } : {}),
     };
   }
 

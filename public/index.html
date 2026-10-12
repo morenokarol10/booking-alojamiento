@@ -22,8 +22,14 @@
       </a>
       <nav class="header-nav" aria-label="Navegación principal">
         <a href="#alojamientos">Explorar estancias</a>
-        <a class="host-link" id="my-bookings-link" href="#mi-perfil" hidden
+        <a class="host-link" id="favorites-link" href="#favoritos"
+          >Favoritos</a
+        >
+        <a class="host-link" id="profile-link" href="#mi-perfil" hidden
           >Mi Perfil</a
+        >
+        <a class="host-link" id="my-bookings-link" href="#mis-reservas" hidden
+          >Mis reservas</a
         >
         <a class="host-link" id="admin-mode-link" href="/admin/" hidden
           >Modo Administración</a
@@ -172,22 +178,18 @@
         Explorar otro alojamiento
       </button>
     </dialog>
-    <dialog
-      id="my-bookings-dialog"
-      class="bookings-dialog"
-      aria-labelledby="my-bookings-title"
-    >
+    <dialog id="profile-dialog" class="bookings-dialog" aria-labelledby="profile-title">
       <button
         class="dialog-close"
         type="button"
-        aria-label="Cerrar mis reservas"
+        aria-label="Cerrar mi perfil"
       >
         ×
       </button>
       <div class="bookings-dialog-content">
         <span class="eyebrow section-eyebrow">TU CUENTA</span>
-        <h2 id="my-bookings-title">Mi perfil</h2>
-        <p class="bookings-intro">Consulta y actualiza tus datos personales.</p>
+        <h2 id="profile-title">Mi perfil</h2>
+        <p class="bookings-intro">Actualiza tus datos personales.</p>
         <form id="profile-form" class="profile-form">
           <label for="profile-full-name">Nombre completo</label>
           <input
@@ -220,6 +222,24 @@
           <p id="profile-status" class="bookings-status" role="status" aria-live="polite"></p>
           <button class="primary-button" type="submit">Guardar perfil</button>
         </form>
+      </div>
+    </dialog>
+    <dialog
+      id="my-bookings-dialog"
+      class="bookings-dialog"
+      aria-labelledby="my-bookings-title"
+    >
+      <button
+        class="dialog-close"
+        type="button"
+        aria-label="Cerrar mis reservas"
+      >
+        ×
+      </button>
+      <div class="bookings-dialog-content">
+        <span class="eyebrow section-eyebrow">TU CUENTA</span>
+        <h2 id="my-bookings-title">Mis reservas</h2>
+        <p class="bookings-intro">Consulta tus próximas estadías y su estado.</p>
         <h3 class="profile-history-title">Historial de reservas</h3>
         <p
           class="bookings-status"
@@ -228,6 +248,83 @@
           aria-live="polite"
         ></p>
         <div class="my-bookings-list" id="my-bookings-list"></div>
+      </div>
+    </dialog>
+    <dialog
+      id="favorites-dialog"
+      class="bookings-dialog"
+      aria-labelledby="favorites-title"
+    >
+      <button class="dialog-close" type="button" aria-label="Cerrar favoritos">
+        ×
+      </button>
+      <div class="bookings-dialog-content">
+        <span class="eyebrow section-eyebrow">TUS ESTANCIAS</span>
+        <h2 id="favorites-title">Favoritos</h2>
+        <p class="bookings-intro">Alojamientos que guardaste para después.</p>
+        <p id="favorites-status" class="bookings-status" role="status" aria-live="polite"></p>
+        <div id="favorites-list" class="my-bookings-list"></div>
+      </div>
+    </dialog>
+    <dialog
+      id="cancel-booking-dialog"
+      class="bookings-dialog"
+      aria-labelledby="cancel-booking-title"
+    >
+      <button
+        class="dialog-close"
+        type="button"
+        aria-label="Cerrar cancelación"
+      >
+        ×
+      </button>
+      <div class="bookings-dialog-content">
+        <span class="eyebrow section-eyebrow">CANCELACIÓN SIMULADA</span>
+        <h2 id="cancel-booking-title">Confirmar cancelación</h2>
+        <p class="bookings-intro">
+          Para esta demostración usa exclusivamente la tarjeta de prueba
+          indicada abajo. No ingreses datos de una tarjeta real. La información
+          se valida localmente y no se envía ni se almacena.
+        </p>
+        <form id="cancel-booking-form" class="profile-form">
+          <label for="test-card-number">Número de tarjeta de prueba</label>
+          <input
+            id="test-card-number"
+            name="cardNumber"
+            type="text"
+            inputmode="numeric"
+            autocomplete="off"
+            pattern="(4242424242424242|4242 4242 4242 4242)"
+            placeholder="4242 4242 4242 4242"
+            required
+          />
+          <label for="test-card-expiry">Vencimiento (MM/AA)</label>
+          <input
+            id="test-card-expiry"
+            name="expiry"
+            type="text"
+            inputmode="numeric"
+            autocomplete="off"
+            pattern="(0[1-9]|1[0-2])/[0-9]{2}"
+            placeholder="12/30"
+            required
+          />
+          <label for="test-card-cvc">CVC de prueba</label>
+          <input
+            id="test-card-cvc"
+            name="cvc"
+            type="password"
+            inputmode="numeric"
+            autocomplete="off"
+            pattern="[0-9]{3}"
+            maxlength="3"
+            required
+          />
+          <p id="cancel-booking-status" class="bookings-status" role="status" aria-live="polite">
+            Tarjeta de prueba: 4242 4242 4242 4242. Usa una fecha futura y cualquier CVC de tres dígitos.
+          </p>
+          <button class="primary-button" type="submit">Validar y cancelar</button>
+        </form>
       </div>
     </dialog>
     <div

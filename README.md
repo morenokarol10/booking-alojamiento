@@ -52,7 +52,7 @@ de disponibilidad externa.
 | Despliegue en la nube                    |         **No verificable (503)**         | Blueprint y [Dockerfile](./Dockerfile); las URLs públicas consultadas devolvieron HTTP 503                                                            |
 | Panel de Administración funcional        | **Cumple en código; nube no verificada** | [public/admin/](./public/admin/), `GET /api/v1/admin/eventos`, CRUD protegido por guards `admin`                                                      |
 | Marketplace web funcional                | **Cumple en código; nube no verificada** | [public/](./public/), catálogo y filtros consumen `GET /api/v1/alojamientos`                                                                          |
-| APIs implementadas y documentadas        |         **Cumple parcialmente**          | Controladores NestJS y Swagger generado en `/api/docs`; el documento runtime no es idéntico al contrato oficial                                       |
+| APIs implementadas y documentadas        | **Cumple parcialmente**                  | Controladores NestJS, Swagger en `/api/docs` y contrato propio en `contracts/booking-ec-project.openapi.yaml`; el contrato GDS se conserva separado |
 | Base de datos operativa (3FN)            | **Parcial; no se acredita 3FN estricta** | [database/schema.sql](./database/schema.sql) define `alojamientos`, `reservas`, `eventos_log`; no crea tabla `proveedores`, `servicios` ni `imagenes` |
 | Diseño API-First y contratos             |               **Parcial**                | Hay DTOs, validación y contrato oficial en [contracts/](./contracts/); los recursos y rutas locales no coinciden estrictamente con el contrato GDS    |
 | Endpoints para interoperabilidad         |     **Cumple en forma de respuesta**     | Mappers camelCase ↔ snake_case en `src/modules/*/entities/*mapper.ts`                                                                                 |
@@ -62,13 +62,16 @@ de disponibilidad externa.
 
 ### Observaciones importantes para la evaluación
 
-1. El archivo oficial [alojamientos-openapi.yaml](./contracts/alojamientos-openapi.yaml)
+1. El contrato externo [alojamientos-openapi.yaml](./contracts/alojamientos-openapi.yaml)
    describe **GDS Alojamientos Core API v1.0.0**: incluye rutas como `/search`
    y `/orders/create`, y no define el conjunto local
    `/api/v1/alojamientos` y `/api/v1/reservas` ni los modelos solicitados en
-   este prototipo. NestJS toma del YAML el título, la descripción, la versión y
-   las etiquetas para Swagger; genera sus rutas a partir de los controladores.
-   Por tanto, **no se declara conformidad estricta** entre ambos contratos.
+   este prototipo. Se conserva sin cambios por su uso en la integración. El
+   contrato propio del producto es
+   [booking-ec-project.openapi.yaml](./contracts/booking-ec-project.openapi.yaml);
+   NestJS toma de este el título, la descripción, la versión y las etiquetas
+   para Swagger, y genera las operaciones runtime desde los controladores.
+   Son contratos distintos y no se declara que la API local implemente el GDS.
 2. El esquema actual contiene tres tablas de dominio. `proveedor_id` es un UUID
    sin tabla `proveedores` ni clave foránea en el script actual.
 3. `servicios` y `urls_imagenes` son arreglos PostgreSQL `TEXT[]`, no JSONB ni
@@ -274,11 +277,27 @@ restricción de una sola reserva por usuario. Tras cada POST exitoso, el
 Marketplace cierra y limpia el formulario, muestra **“¡Reserva realizada con
 éxito!”** y permite continuar explorando o consultar el historial.
 
+El acceso a **Mi Perfil** y **Mis reservas** son acciones separadas. El botón
+de corazón guarda o quita alojamientos de Favoritos en el almacenamiento local
+del navegador; no requiere autenticación ni crea una tabla adicional. Si falta
+información obligatoria en el perfil, se abre el formulario y al guardarlo se
+retoma el alojamiento elegido.
+
+Desde **Mis reservas**, el cliente puede cancelar una reserva confirmada que
+aún no haya iniciado. Para la demostración debe ingresar la tarjeta sandbox
+`4242 4242 4242 4242`, un vencimiento futuro y cualquier CVC de tres dígitos.
+La tarjeta se valida localmente, se borra del formulario y nunca se envía a la
+API ni se almacena. La API solo recibe `confirmacionPagoSimulado: true`, marca
+la reserva como cancelada en Supabase y registra un evento de devolución
+simulada. No se procesa dinero ni se realiza una devolución financiera real.
+
 ### 3.4 APIs y Documentación Swagger/OpenAPI
 
 Swagger se publica en `/api/docs`. La aplicación carga en runtime los
-metadatos `info` y `tags` del YAML oficial, y genera el documento operativo
-desde los controladores y DTOs NestJS. Los métodos protegidos indican el
+metadatos `info` y `tags` del contrato propio
+`contracts/booking-ec-project.openapi.yaml`, y genera el documento operativo
+desde los controladores y DTOs NestJS. El contrato GDS
+`contracts/alojamientos-openapi.yaml` no se modifica. Los métodos protegidos indican el
 esquema Bearer `supabase-jwt`.
 
 #### Endpoints del prototipo
@@ -288,30 +307,31 @@ esquema Bearer `supabase-jwt`.
 | `POST`   | `/api/v1/auth/register`         | Público; crea exclusivamente clientes     |
 | `POST`   | `/api/v1/auth/login`            | Público                                   |
 | `GET`    | `/api/v1/auth/me`               | JWT válido                                |
+| `PUT`    | `/api/v1/auth/me`               | JWT válido; actualiza perfil              |
 | `GET`    | `/api/v1/alojamientos`          | Público; filtros `ciudad`, `precioMaximo` |
 | `GET`    | `/api/v1/alojamientos/:id`      | Público                                   |
-| `POST`   | `/api/v1/alojamientos`          | Solo `admin`                              |
-| `PUT`    | `/api/v1/alojamientos/:id`      | Solo `admin`                              |
+| `POST`   | `/api/v1/alojamientos`          | `admin` o `empleado`                      |
+| `PUT`    | `/api/v1/alojamientos/:id`      | `admin` o `empleado`                      |
 | `DELETE` | `/api/v1/alojamientos/:id`      | Solo `admin`                              |
 | `POST`   | `/api/v1/reservas`              | Solo `cliente` autenticado                |
 | `GET`    | `/api/v1/reservas/mis-reservas` | Solo `cliente`; filtra por su JWT         |
+| `POST`   | `/api/v1/reservas/:id/cancelar` | Titular cliente; reserva futura confirmada |
 | `GET`    | `/api/v1/reservas`              | Solo `admin`                              |
+| `GET/POST` | `/api/v1/admin/usuarios`       | Solo `admin`                              |
+| `PUT`    | `/api/v1/admin/usuarios/:id/rol`| Solo `admin`                              |
 | `GET`    | `/api/v1/admin/eventos`         | Solo `admin`                              |
 
 #### Contrato de la materia frente a la API implementada
 
 Se preserva sin modificaciones el archivo
 [contracts/alojamientos-openapi.yaml](./contracts/alojamientos-openapi.yaml).
-Este contrato oficial define el dominio GDS, con operaciones como búsqueda,
-disponibilidad y órdenes; no contiene las rutas locales anteriores ni los
-modelos de alojamiento/reserva usados por esta aplicación. El documento
-Swagger runtime describe la API NestJS y reutiliza metadatos del YAML, pero no
-es una implementación exacta de todas sus operaciones.
-
-La alineación estricta requiere una decisión del curso/equipo: actualizar el
-API local al contrato GDS sin romper el producto, o acordar y versionar un
-contrato complementario para el prototipo. Este README no declara equivalencia
-que no está presente en el código.
+Este contrato externo define el dominio GDS, con operaciones como búsqueda,
+disponibilidad y órdenes; no contiene las rutas locales ni los modelos de
+alojamiento/reserva usados por esta aplicación. La especificación independiente
+para las rutas del producto se mantiene en
+[contracts/booking-ec-project.openapi.yaml](./contracts/booking-ec-project.openapi.yaml).
+El contrato de integración no debe editarse para documentar funcionalidades
+locales; las rutas propias se agregan únicamente al contrato del proyecto.
 
 ### 3.5 Base de Datos Supabase y Normalización
 
@@ -449,7 +469,8 @@ reserva puede persistir sin evento. Para robustecerlo en una siguiente fase:
 ```text
 .
 ├── contracts/
-│   └── alojamientos-openapi.yaml   # contrato oficial, sin cambios
+│   ├── alojamientos-openapi.yaml          # contrato de integración, sin cambios
+│   └── booking-ec-project.openapi.yaml    # contrato de la API del producto
 ├── database/
 │   ├── schema.sql                 # esquema inicial, políticas y semillas
 │   └── migrations/                # evolución del modelo y seguridad

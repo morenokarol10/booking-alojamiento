@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { load } from 'js-yaml';
 import { AppModule } from './app.module';
 
-interface OfficialOpenApiDocument {
+interface ProjectOpenApiDocument {
   info: {
     title: string;
     description: string;
@@ -33,31 +33,28 @@ async function bootstrap() {
 
   const parsedContract: unknown = load(
     readFileSync(
-      join(process.cwd(), 'contracts', 'alojamientos-openapi.yaml'),
+      join(process.cwd(), 'contracts', 'booking-ec-project.openapi.yaml'),
       'utf8',
     ),
   );
-  if (!isOfficialOpenApiDocument(parsedContract)) {
+  if (!isProjectOpenApiDocument(parsedContract)) {
     throw new Error(
-      'El contrato OpenAPI debe definir metadatos válidos y tags con nombre.',
+      'El contrato OpenAPI del proyecto debe definir metadatos válidos y tags con nombre.',
     );
   }
-  const officialContract = parsedContract;
+  const projectContract = parsedContract;
 
   const swaggerConfig = new DocumentBuilder()
-    .setTitle(officialContract.info.title)
-    .setDescription(officialContract.info.description)
-    .setVersion(officialContract.info.version)
+    .setTitle(projectContract.info.title)
+    .setDescription(projectContract.info.description)
+    .setVersion(projectContract.info.version)
     .addBearerAuth(
       { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
       'supabase-jwt',
     )
-    .addTag('Alojamientos', 'Gestión de hoteles y habitaciones')
-    .addTag('Reservas', 'Flujo de reservas')
-    .addTag('Administración', 'Operaciones administrativas')
     .build();
-  if (officialContract.tags) {
-    for (const tag of officialContract.tags) {
+  if (projectContract.tags) {
+    for (const tag of projectContract.tags) {
       swaggerConfig.tags = [
         ...(swaggerConfig.tags ?? []),
         { name: tag.name, description: tag.description },
@@ -70,9 +67,9 @@ async function bootstrap() {
   await app.listen(process.env.PORT ?? 3000);
 }
 
-function isOfficialOpenApiDocument(
+function isProjectOpenApiDocument(
   value: unknown,
-): value is OfficialOpenApiDocument {
+): value is ProjectOpenApiDocument {
   if (!isRecord(value) || !isRecord(value.info)) return false;
   if (
     typeof value.info.title !== 'string' ||

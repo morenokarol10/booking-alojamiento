@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { ReservaEntity } from '../entities/reserva.entity';
 
 export class ReservaResponseDto {
@@ -22,6 +22,9 @@ export class ReservaResponseDto {
 
   @ApiProperty()
   message!: string;
+
+  @ApiPropertyOptional()
+  warning?: string;
 }
 
 export class ReservasResponseDto {
@@ -30,4 +33,30 @@ export class ReservasResponseDto {
 
   @ApiProperty()
   message!: string;
+}
+
+export class CancelReservaResponseDto {
+  @ApiProperty({ type: ReservaEntity })
+  data!: ReservaEntity;
+
+  @ApiProperty({
+    type: 'object',
+    additionalProperties: true,
+    example: {
+      estado: 'simulado',
+      referencia: 'c0440f2d-2ba3-4cbb-9952-1b6cdf488afa',
+      simulado: true,
+    },
+  })
+  pagoCancelacion!: {
+    estado: 'simulado';
+    referencia: string;
+    simulado: true;
+  };
+
+  @ApiProperty()
+  message!: string;
+
+  @ApiPropertyOptional()
+  warning?: string;
 }

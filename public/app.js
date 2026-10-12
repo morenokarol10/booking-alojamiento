@@ -25,14 +25,38 @@ const dialogContent = document.querySelector('#dialog-content');
 const successDialog = document.querySelector('#success-dialog');
 const successMessage = document.querySelector('#success-message');
 const myBookingsDialog = document.querySelector('#my-bookings-dialog');
+const profileDialog = document.querySelector('#profile-dialog');
 const myBookingsList = document.querySelector('#my-bookings-list');
 const myBookingsStatus = document.querySelector('#my-bookings-status');
 const profileForm = document.querySelector('#profile-form');
 const profileStatus = document.querySelector('#profile-status');
+const favoritesDialog = document.querySelector('#favorites-dialog');
+const favoritesList = document.querySelector('#favorites-list');
+const favoritesStatus = document.querySelector('#favorites-status');
+const cancelBookingDialog = document.querySelector('#cancel-booking-dialog');
+const cancelBookingForm = document.querySelector('#cancel-booking-form');
+const cancelBookingStatus = document.querySelector('#cancel-booking-status');
 const toast = document.querySelector('#toast');
 let toastTimeout;
 let currentListings = [];
 let selectedListing = null;
+let pendingBookingListing = null;
+let selectedBookingForCancellation = null;
+const FAVORITES_KEY = 'bookingFavoriteIds';
+
+function readFavoriteIds() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(FAVORITES_KEY) || '[]');
+    return Array.isArray(stored)
+      ? stored.filter((id) => typeof id === 'string')
+      : [];
+  } catch (error) {
+    console.error('No se pudieron leer los alojamientos favoritos.', error);
+    return [];
+  }
+}
+
+let favoriteIds = new Set(readFavoriteIds());
 
 function escapeHtml(value = '') {
   return String(value).replace(/[&<>"']/g, (character) => {
@@ -104,11 +128,11 @@ function renderListings(listings) {
   grid.innerHTML = listings
     .map(
       (listing, index) => `
-        <article class="listing-card" tabindex="0" role="button" data-listing-index="${index}" aria-label="Ver detalles de ${escapeHtml(listing.nombre)}">
+        <article class="listing-card" tabindex="0" data-listing-index="${index}" aria-label="Ver detalles de ${escapeHtml(listing.nombre)}">
           <div class="card-image-wrap">
             <img class="card-image" src="${escapeHtml(imageFor(listing))}" alt="${escapeHtml(listing.nombre)}" loading="${index < 4 ? 'eager' : 'lazy'}" />
             <span class="type-pill">${escapeHtml(TYPE_LABELS[listing.tipo] || listing.tipo)}</span>
-            <span class="favorite-mark" aria-hidden="true">♡</span>
+            <button class="favorite-mark${favoriteIds.has(listing.id) ? ' is-favorite' : ''}" type="button" data-favorite-id="${escapeHtml(listing.id)}" aria-label="${favoriteIds.has(listing.id) ? 'Quitar de favoritos' : 'Añadir a favoritos'}" aria-pressed="${favoriteIds.has(listing.id)}">♥</button>
           </div>
           <div class="card-info">
             <div class="card-title-line">
@@ -264,7 +288,6 @@ async function loadMyBookings() {
   }
 
   myBookingsStatus.textContent = 'Cargando tus reservas…';
-  profileStatus.textContent = 'Cargando tu perfil…';
   myBookingsList.replaceChildren();
   try {
     const user = await window.BookingAuth.fetchProfile();
@@ -273,11 +296,6 @@ async function loadMyBookings() {
       window.BookingAuth.goToLogin('/marketplace/');
       return;
     }
-    profileForm.elements.fullName.value = user.fullName || '';
-    profileForm.elements.email.value = user.email || '';
-    profileForm.elements.phone.value = user.phone || '';
-    profileStatus.textContent = '';
-
     const response = await fetch(`${API_BASE}/reservas/mis-reservas`, {
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -307,6 +325,9 @@ async function loadMyBookings() {
         const location = booking.alojamiento?.ciudad || '';
         const currency = booking.moneda || 'USD';
         const status = booking.estado || 'pendiente';
+        const canCancel =
+          status === 'confirmada' &&
+          booking.fechaCheckin > new Date().toISOString().slice(0, 10);
         return `
           <article class="my-booking-card">
             <div class="my-booking-heading">
@@ -318,13 +339,36 @@ async function loadMyBookings() {
             </div>
             <p class="my-booking-dates">${formatDate(booking.fechaCheckin)} – ${formatDate(booking.fechaCheckout)}</p>
             <strong>${formatMoney(booking.precioTotal, currency)}</strong>
+            ${
+              canCancel
+                ? `<button class="secondary-button cancel-booking-button" type="button" data-cancel-booking-id="${escapeHtml(booking.id)}">Cancelar reserva</button>`
+                : ''
+            }
           </article>`;
       })
       .join('');
   } catch (error) {
     myBookingsStatus.textContent =
       error.message || 'No se pudieron cargar tus reservas.';
-    profileStatus.textContent = error.message || 'No se pudo cargar tu perfil.';
+  }
+}
+
+async function loadMyProfile() {
+  profileStatus.textContent = 'Cargando tu perfil…';
+  try {
+    const user = await window.BookingAuth.fetchProfile();
+    if (!user) {
+      profileDialog.close();
+      window.BookingAuth.goToLogin('/marketplace/');
+      return;
+    }
+    profileForm.elements.fullName.value = user.fullName || '';
+    profileForm.elements.email.value = user.email || '';
+    profileForm.elements.phone.value = user.phone || '';
+    profileStatus.textContent = '';
+  } catch (error) {
+    profileStatus.textContent =
+      error.message || 'No se pudo cargar tu perfil.';
   }
 }
 
@@ -347,7 +391,7 @@ profileForm.addEventListener('submit', async (event) => {
     });
     if (result.status === 401) {
       window.BookingAuth.clearSession();
-      myBookingsDialog.close();
+      profileDialog.close();
       window.BookingAuth.goToLogin('/marketplace/');
       return;
     }
@@ -357,8 +401,12 @@ profileForm.addEventListener('submit', async (event) => {
       body.data,
     );
     profileStatus.textContent = 'Perfil actualizado correctamente.';
-    const accountName = document.querySelector('#my-bookings-link');
-    accountName.textContent = body.data.fullName || 'Mi Perfil';
+    if (pendingBookingListing) {
+      const listing = pendingBookingListing;
+      pendingBookingListing = null;
+      profileDialog.close();
+      await openBookingDetails(listing);
+    }
   } catch (error) {
     profileStatus.textContent =
       error.message || 'No se pudo actualizar tu perfil.';
@@ -410,10 +458,13 @@ async function submitBooking(event) {
     }
     const body = await readResponse(response);
     detailDialog.close();
-    successMessage.textContent = `Tu reserva en ${bookedAccommodation.nombre} quedó confirmada. Puedes reservar otros alojamientos o consultar todas tus reservas desde el encabezado.`;
+    successMessage.textContent = body.warning
+      ? `Tu reserva en ${bookedAccommodation.nombre} quedó confirmada. Aviso: ${body.warning}`
+      : `Tu reserva en ${bookedAccommodation.nombre} quedó confirmada. Puedes consultarla desde Mis reservas.`;
     form.reset();
     selectedListing = null;
     successDialog.showModal();
+    void loadListings();
   } catch (error) {
     showToast(
       error.message || 'No se pudo completar la reserva. Inténtalo de nuevo.',
@@ -426,9 +477,11 @@ async function submitBooking(event) {
 
 async function initializeMarketplace() {
   const adminLink = document.querySelector('#admin-mode-link');
+  const profileLink = document.querySelector('#profile-link');
   const myBookingsLink = document.querySelector('#my-bookings-link');
   const accountLink = document.querySelector('#account-link');
   adminLink.hidden = true;
+  profileLink.hidden = true;
   myBookingsLink.hidden = true;
   const token = window.BookingAuth.token();
   if (token) {
@@ -438,10 +491,8 @@ async function initializeMarketplace() {
         if (user.role === 'admin' || user.role === 'empleado') {
           adminLink.hidden = false;
         }
+        profileLink.hidden = user.role !== 'cliente';
         myBookingsLink.hidden = user.role !== 'cliente';
-        if (user.role === 'cliente') {
-          myBookingsLink.textContent = user.fullName || 'Mi Perfil';
-        }
       }
       if (user) {
         accountLink.textContent = 'Cerrar sesión';
@@ -468,6 +519,16 @@ async function initializeMarketplace() {
   }
 }
 
+document.querySelector('#profile-link').addEventListener('click', (event) => {
+  event.preventDefault();
+  if (!window.BookingAuth.token()) {
+    window.BookingAuth.goToLogin('/marketplace/');
+    return;
+  }
+  profileDialog.showModal();
+  void loadMyProfile();
+});
+
 document
   .querySelector('#my-bookings-link')
   .addEventListener('click', (event) => {
@@ -475,6 +536,173 @@ document
     myBookingsDialog.showModal();
     void loadMyBookings();
   });
+
+document.querySelector('#favorites-link').addEventListener('click', (event) => {
+  event.preventDefault();
+  favoritesDialog.showModal();
+  void loadFavorites();
+});
+
+async function loadFavorites() {
+  favoritesStatus.textContent = 'Cargando favoritos…';
+  favoritesList.replaceChildren();
+  const ids = [...favoriteIds];
+  if (!ids.length) {
+    favoritesStatus.textContent = 'Aún no has guardado alojamientos favoritos.';
+    return;
+  }
+  try {
+    const response = await fetch(`${API_BASE}/alojamientos`);
+    const body = await readResponse(response);
+    const listings = Array.isArray(body) ? body : body.data;
+    if (!Array.isArray(listings)) {
+      throw new Error('La API devolvió una lista de alojamientos no válida.');
+    }
+    const favorites = listings.filter((listing) => favoriteIds.has(listing.id));
+    if (!favorites.length) {
+      favoritesStatus.textContent =
+        'Los alojamientos guardados ya no están disponibles.';
+      return;
+    }
+    favoritesStatus.textContent = `${favorites.length} ${
+      favorites.length === 1 ? 'alojamiento favorito' : 'alojamientos favoritos'
+    }`;
+    favoritesList.innerHTML = favorites
+      .map(
+        (listing) => `
+          <article class="my-booking-card favorite-card">
+            <div class="my-booking-heading">
+              <div>
+                <h3>${escapeHtml(listing.nombre)}</h3>
+                <p>${escapeHtml(listing.ciudad)}</p>
+              </div>
+              <button class="secondary-button" type="button" data-remove-favorite-id="${escapeHtml(listing.id)}">Quitar</button>
+            </div>
+            <strong>${formatMoney(listing.precioBaseNoche, listing.moneda)} / noche</strong>
+          </article>`,
+      )
+      .join('');
+  } catch (error) {
+    favoritesStatus.textContent =
+      error.message || 'No se pudieron cargar tus favoritos.';
+  }
+}
+
+function saveFavoriteIds() {
+  try {
+    localStorage.setItem(FAVORITES_KEY, JSON.stringify([...favoriteIds]));
+  } catch (error) {
+    console.error('No se pudieron guardar los alojamientos favoritos.', error);
+    showToast('No se pudo guardar el favorito en este navegador.', true);
+  }
+}
+
+function toggleFavorite(id) {
+  if (favoriteIds.has(id)) favoriteIds.delete(id);
+  else favoriteIds.add(id);
+  saveFavoriteIds();
+  renderListings(currentListings);
+  if (favoritesDialog.open) void loadFavorites();
+}
+
+grid.addEventListener('click', (event) => {
+  const button = event.target.closest('[data-favorite-id]');
+  if (!button) return;
+  event.stopPropagation();
+  const id = button.dataset.favoriteId;
+  const wasFavorite = favoriteIds.has(id);
+  toggleFavorite(id);
+  showToast(
+    wasFavorite ? 'Se quitó de favoritos.' : 'Se agregó a favoritos.',
+  );
+});
+
+favoritesList.addEventListener('click', (event) => {
+  const button = event.target.closest('[data-remove-favorite-id]');
+  if (!button) return;
+  toggleFavorite(button.dataset.removeFavoriteId);
+});
+
+myBookingsList.addEventListener('click', (event) => {
+  const button = event.target.closest('[data-cancel-booking-id]');
+  if (!button) return;
+  selectedBookingForCancellation = button.dataset.cancelBookingId;
+  cancelBookingForm.reset();
+  cancelBookingStatus.textContent =
+    'Tarjeta de prueba: 4242 4242 4242 4242. Usa una fecha futura y cualquier CVC de tres dígitos.';
+  cancelBookingDialog.showModal();
+});
+
+function isFutureExpiry(value) {
+  const match = /^(0[1-9]|1[0-2])\/(\d{2})$/.exec(value);
+  if (!match) return false;
+  const month = Number(match[1]);
+  const year = 2000 + Number(match[2]);
+  const now = new Date();
+  return year > now.getFullYear() ||
+    (year === now.getFullYear() && month >= now.getMonth() + 1);
+}
+
+cancelBookingForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  if (!cancelBookingForm.reportValidity() || !selectedBookingForCancellation) {
+    return;
+  }
+  const formData = new FormData(cancelBookingForm);
+  const cardNumber = formData.get('cardNumber').toString().replace(/\s/g, '');
+  const expiry = formData.get('expiry').toString();
+  const cvc = formData.get('cvc').toString();
+  if (
+    cardNumber !== '4242424242424242' ||
+    !isFutureExpiry(expiry) ||
+    !/^\d{3}$/.test(cvc)
+  ) {
+    cancelBookingStatus.textContent =
+      'Datos de prueba inválidos. Usa la tarjeta indicada, una fecha futura y un CVC de tres dígitos.';
+    return;
+  }
+
+  const button = cancelBookingForm.querySelector('button[type="submit"]');
+  button.disabled = true;
+  cancelBookingStatus.textContent = 'Validando los datos de prueba…';
+  cancelBookingForm.elements.cardNumber.value = '';
+  cancelBookingForm.elements.expiry.value = '';
+  cancelBookingForm.elements.cvc.value = '';
+  try {
+    const response = await fetch(
+      `${API_BASE}/reservas/${encodeURIComponent(selectedBookingForCancellation)}/cancelar`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${window.BookingAuth.token()}`,
+        },
+        body: JSON.stringify({ confirmacionPagoSimulado: true }),
+      },
+    );
+    if (response.status === 401) {
+      window.BookingAuth.clearSession();
+      cancelBookingDialog.close();
+      window.BookingAuth.goToLogin('/marketplace/');
+      return;
+    }
+    const body = await readResponse(response);
+    cancelBookingDialog.close();
+    showToast(
+      body.warning
+        ? `Reserva cancelada. ${body.warning}`
+        : 'Reserva cancelada. La devolución fue simulada; no se procesó dinero real.',
+    );
+    await loadMyBookings();
+  } catch (error) {
+    cancelBookingStatus.textContent =
+      error.message || 'No se pudo cancelar la reserva.';
+    cancelBookingForm.elements.cardNumber.value = '';
+  } finally {
+    button.disabled = false;
+    selectedBookingForCancellation = null;
+  }
+});
 
 searchForm.addEventListener('submit', (event) => {
   event.preventDefault();
@@ -491,6 +719,7 @@ grid.addEventListener('click', (event) => {
     loadListings();
     return;
   }
+  if (event.target.closest('[data-favorite-id]')) return;
   const card = event.target.closest('[data-listing-index]');
   if (!card) return;
   void openBookingDetails(currentListings[Number(card.dataset.listingIndex)]);
@@ -513,9 +742,13 @@ async function openBookingDetails(listing) {
       return;
     }
     if (!user.fullName || !user.email || !user.phone) {
-      showToast(
-        'Completa tu nombre, correo y teléfono desde Mi Perfil antes de reservar.',
-      );
+      pendingBookingListing = listing;
+      profileForm.elements.fullName.value = user.fullName || '';
+      profileForm.elements.email.value = user.email || '';
+      profileForm.elements.phone.value = user.phone || '';
+      profileStatus.textContent =
+        'Completa tu nombre, correo y teléfono. Al guardar, continuarás con esta reserva.';
+      profileDialog.showModal();
       return;
     }
     selectedListing = listing;
@@ -544,6 +777,19 @@ document
   .addEventListener('click', () => successDialog.close());
 myBookingsDialog.addEventListener('click', (event) => {
   if (event.target === myBookingsDialog) myBookingsDialog.close();
+});
+profileDialog.addEventListener('click', (event) => {
+  if (event.target === profileDialog) profileDialog.close();
+});
+favoritesDialog.addEventListener('click', (event) => {
+  if (event.target === favoritesDialog) favoritesDialog.close();
+});
+cancelBookingDialog.addEventListener('click', (event) => {
+  if (event.target === cancelBookingDialog) cancelBookingDialog.close();
+});
+cancelBookingDialog.addEventListener('close', () => {
+  cancelBookingForm.reset();
+  selectedBookingForCancellation = null;
 });
 detailDialog.addEventListener('click', (event) => {
   if (event.target === detailDialog) detailDialog.close();

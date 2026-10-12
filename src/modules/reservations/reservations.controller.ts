@@ -2,6 +2,8 @@ import {
   Body,
   Controller,
   Get,
+  Param,
+  ParseUUIDPipe,
   Post,
   Req,
   UnauthorizedException,
@@ -11,16 +13,20 @@ import {
   ApiBadRequestResponse,
   ApiBearerAuth,
   ApiCreatedResponse,
+  ApiConflictResponse,
   ApiForbiddenResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
+  ApiParam,
   ApiResponse,
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { CreateReservaDto } from './dto/create-reserva.dto';
+import { CancelReservaDto } from './dto/cancel-reserva.dto';
 import {
+  CancelReservaResponseDto,
   ReservaResponseDto,
   ReservasResponseDto,
 } from './dto/reserva-response.dto';
@@ -41,9 +47,10 @@ export class ReservationsController {
   @ApiBearerAuth('supabase-jwt')
   @ApiUnauthorizedResponse({ description: 'Token ausente o no válido.' })
   @ApiForbiddenResponse({ description: 'Se requiere rol cliente.' })
-  @ApiOperation({ summary: 'Crear una reserva y registrar su evento' })
+  @ApiOperation({ summary: 'Crear una reserva para el cliente autenticado' })
   @ApiCreatedResponse({
-    description: 'Reserva creada y evento ReservaRealizadaEvent registrado.',
+    description:
+      'Reserva creada. Si falla la bitácora de eventos, se responde con una advertencia sin ocultar que la reserva quedó guardada.',
     type: ReservaResponseDto,
   })
   @ApiBadRequestResponse({
@@ -51,12 +58,45 @@ export class ReservationsController {
       'Datos inválidos, fechas ocupadas o alojamiento no disponible.',
   })
   @ApiNotFoundResponse({ description: 'Alojamiento no encontrado.' })
-  @ApiResponse({ status: 500, description: 'Error al crear reserva o evento.' })
+  @ApiResponse({ status: 500, description: 'Error al crear la reserva.' })
   create(@Body() dto: CreateReservaDto, @Req() request: AuthenticatedRequest) {
     if (!request.user) {
       throw new UnauthorizedException('La sesión no está autenticada.');
     }
     return this.reservationsService.create(dto, request.user);
+  }
+
+  @Post(':id/cancelar')
+  @UseGuards(SupabaseAuthGuard, RolesGuard)
+  @Roles('cliente')
+  @ApiBearerAuth('supabase-jwt')
+  @ApiUnauthorizedResponse({ description: 'Token ausente o no válido.' })
+  @ApiForbiddenResponse({ description: 'Se requiere rol cliente.' })
+  @ApiOperation({
+    summary: 'Cancelar una reserva futura del cliente autenticado',
+  })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiOkResponse({
+    description: 'Reserva cancelada; devolución simulada.',
+    type: CancelReservaResponseDto,
+  })
+  @ApiBadRequestResponse({
+    description: 'Se requiere la confirmación de pago simulado.',
+  })
+  @ApiNotFoundResponse({ description: 'Reserva no encontrada.' })
+  @ApiConflictResponse({
+    description: 'La reserva no está confirmada, ya fue cancelada o ya inició.',
+  })
+  @ApiResponse({ status: 500, description: 'Error al cancelar la reserva.' })
+  cancel(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CancelReservaDto,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    if (!request.user) {
+      throw new UnauthorizedException('La sesión no está autenticada.');
+    }
+    return this.reservationsService.cancel(id, dto, request.user);
   }
 
   @Get()

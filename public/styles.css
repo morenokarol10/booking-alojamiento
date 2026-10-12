@@ -372,12 +372,25 @@ input:focus-visible {
   right: 12px;
   width: 30px;
   height: 30px;
+  padding: 0;
   display: grid;
   place-items: center;
+  border: 0;
   border-radius: 50%;
   background: rgb(255 255 255 / 90%);
   color: var(--green);
   font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    color 0.15s,
+    transform 0.15s;
+}
+.favorite-mark:hover {
+  transform: scale(1.12);
+}
+.favorite-mark.is-favorite {
+  color: #bd4e54;
 }
 .card-info {
   padding: 12px 1px 0;
@@ -530,7 +543,8 @@ input:focus-visible {
   box-shadow: 0 25px 100px rgb(18 31 22 / 28%);
 }
 .detail-dialog::backdrop,
-.success-dialog::backdrop {
+.success-dialog::backdrop,
+.bookings-dialog::backdrop {
   background: rgb(22 33 26 / 56%);
   backdrop-filter: blur(3px);
 }
@@ -713,6 +727,24 @@ input:focus-visible {
   max-height: min(80vh, 760px);
   padding: 34px;
 }
+.secondary-button {
+  min-height: 35px;
+  margin-top: 12px;
+  padding: 0 12px;
+  border: 1px solid #dfe4de;
+  border-radius: 7px;
+  background: #fff;
+  color: #8c493e;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.secondary-button:hover {
+  background: #fbf2f0;
+}
+.favorite-card .secondary-button {
+  margin-top: 0;
+}
 .bookings-dialog-content h2 {
   margin: 10px 0 5px;
   font-family: 'Playfair Display', serif;
@@ -879,14 +911,14 @@ input:focus-visible {
     font-size: 20px;
   }
   .header-nav {
-    gap: 12px;
+    gap: 6px;
   }
   .header-nav > a:first-child {
     display: none;
   }
   .host-link {
-    padding: 9px 12px;
-    font-size: 11px;
+    padding: 8px 9px;
+    font-size: 10px;
   }
   .hero {
     padding: 59px 20px 33px;

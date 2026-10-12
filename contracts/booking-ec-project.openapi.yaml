@@ -14,6 +14,7 @@ tags:
   - name: Autenticación
   - name: Alojamientos
   - name: Reservas
+  - name: Favoritos
   - name: Administración
 security:
   - supabase-jwt: []
@@ -72,6 +73,65 @@ paths:
         '200':
           description: Perfil actualizado.
         '400':
+          $ref: '#/components/responses/Error'
+  /auth/me/payment-method:
+    put:
+      tags: [Autenticación]
+      summary: Guardar una referencia enmascarada de tarjeta de prueba
+      description: Solo conserva marca y últimos cuatro dígitos; no recibe PAN ni CVV.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SavedPaymentMethod'
+      responses:
+        '200':
+          description: Referencia guardada en los metadatos del perfil.
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+  /favoritos:
+    get:
+      tags: [Favoritos]
+      summary: Listar IDs favoritos del usuario autenticado
+      responses:
+        '200':
+          description: IDs de alojamientos favoritos.
+        '401':
+          $ref: '#/components/responses/Error'
+    post:
+      tags: [Favoritos]
+      summary: Guardar un alojamiento como favorito
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FavoriteCreate'
+      responses:
+        '201':
+          description: Favorito guardado.
+        '401':
+          $ref: '#/components/responses/Error'
+  /favoritos/{alojamientoId}:
+    delete:
+      tags: [Favoritos]
+      summary: Eliminar un alojamiento de favoritos
+      parameters:
+        - name: alojamientoId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Favorito eliminado.
+        '401':
+          $ref: '#/components/responses/Error'
+        '404':
           $ref: '#/components/responses/Error'
   /alojamientos:
     get:
@@ -147,7 +207,10 @@ paths:
     post:
       tags: [Reservas]
       summary: Crear reserva para el cliente autenticado
-      description: El ID y los datos de contacto del cliente se obtienen de la sesión, no del cuerpo.
+      description: >-
+        El ID y los datos de contacto del cliente se obtienen de la sesión, no del cuerpo.
+        El pago de tarjeta es solo sandbox: el navegador valida los datos de prueba
+        y el API nunca recibe el número completo ni el CVV.
       requestBody:
         required: true
         content:
@@ -286,6 +349,23 @@ components:
               error:
                 type: string
   schemas:
+    SavedPaymentMethod:
+      type: object
+      required: [brand, lastFour]
+      properties:
+        brand:
+          type: string
+          enum: [Visa, Mastercard, Demo]
+        lastFour:
+          type: string
+          pattern: '^[0-9]{4}$'
+    FavoriteCreate:
+      type: object
+      required: [alojamientoId]
+      properties:
+        alojamientoId:
+          type: string
+          format: uuid
     RegisterRequest:
       type: object
       required: [fullName, phone, email, password]

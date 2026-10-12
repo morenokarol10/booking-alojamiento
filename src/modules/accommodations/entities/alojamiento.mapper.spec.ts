@@ -42,7 +42,7 @@ describe('alojamiento mapper', () => {
     expect(toAlojamientoDatabase(dto)).not.toHaveProperty('coordenadas');
   });
 
-  it('assigns the default provider and Quito coordinates for a new listing', () => {
+  it('assigns the default provider and coordinates for a new listing', () => {
     const dto = {
       nombre: 'Suite Quito',
       tipo: 'hotel' as const,
@@ -56,8 +56,8 @@ describe('alojamiento mapper', () => {
 
     expect(toAlojamientoDatabase(dto, true)).toMatchObject({
       proveedor_id: '967fd210-4ab8-4efe-81f6-5cfbbfdf20b5',
-      latitud: -0.1807,
-      longitud: -78.4678,
+      latitud: -0.2202,
+      longitud: -78.5122,
     });
   });
 
@@ -236,7 +236,7 @@ describe('alojamiento mapper', () => {
     ],
     ['coordinates missing a longitude', { latitud: -0.22 }],
   ])(
-    'uses Quito coordinates when Supabase returns %s',
+    'uses Ecuador default coordinates when Supabase returns %s',
     (_description, value) => {
       const entity = toAlojamientoEntity({
         id: '10000000-0000-4000-8000-000000000001',
@@ -258,8 +258,8 @@ describe('alojamiento mapper', () => {
       });
 
       expect(entity.coordenadas).toEqual({
-        latitud: -0.1807,
-        longitud: -78.4678,
+        latitud: -0.2202,
+        longitud: -78.5122,
       });
     },
   );

@@ -42,21 +42,8 @@ let currentListings = [];
 let selectedListing = null;
 let pendingBookingListing = null;
 let selectedBookingForCancellation = null;
-const FAVORITES_KEY = 'bookingFavoriteIds';
-
-function readFavoriteIds() {
-  try {
-    const stored = JSON.parse(localStorage.getItem(FAVORITES_KEY) || '[]');
-    return Array.isArray(stored)
-      ? stored.filter((id) => typeof id === 'string')
-      : [];
-  } catch (error) {
-    console.error('No se pudieron leer los alojamientos favoritos.', error);
-    return [];
-  }
-}
-
-let favoriteIds = new Set(readFavoriteIds());
+let favoriteIds = new Set();
+let currentUser = null;
 
 function escapeHtml(value = '') {
   return String(value).replace(/[&<>"']/g, (character) => {
@@ -91,10 +78,16 @@ async function readResponse(response) {
   const body = await response.json().catch(() => null);
   if (!response.ok) {
     const message = body?.message;
+    const databaseDetails =
+      typeof body?.error === 'string' &&
+      typeof message === 'string' &&
+      message === 'No se pudo registrar la reserva.'
+        ? ` ${body.error}`
+        : '';
     throw new Error(
       Array.isArray(message)
         ? message.join(' ')
-        : message || `La solicitud falló (${response.status}).`,
+        : `${message || `La solicitud falló (${response.status}).`}${databaseDetails}`,
     );
   }
   return body;
@@ -188,6 +181,16 @@ function nightsBetween(start, end) {
   return Math.max(0, Math.round((endDate - startDate) / 86400000));
 }
 
+function isFutureMonth(value) {
+  if (!/^\d{4}-\d{2}$/.test(value)) return false;
+  const [year, month] = value.split('-').map(Number);
+  const now = new Date();
+  return (
+    year > now.getFullYear() ||
+    (year === now.getFullYear() && month >= now.getMonth() + 1)
+  );
+}
+
 function renderDetails(listing) {
   const today = new Date();
   const localToday = new Date(
@@ -222,12 +225,28 @@ function renderDetails(listing) {
           <label>Número de huéspedes
             <input name="numHuespedes" type="number" min="1" max="${Number(listing.capacidadMaxima)}" value="1" required />
           </label>
-          <label>Método de pago (simulado)
-            <select name="metodoPagoSimulado" required>
-              <option value="tarjeta" selected>Tarjeta de prueba</option>
-              <option value="transferencia">Transferencia simulada</option>
-            </select>
-          </label>
+          <fieldset class="payment-demo">
+            <legend>Pago con tarjeta (simulación)</legend>
+            <p>Usa exclusivamente la tarjeta de prueba 4242 4242 4242 4242. El número completo y el CVV nunca se envían ni se guardan.</p>
+            ${
+              currentUser?.savedPaymentMethod
+                ? `<label><input name="paymentSource" type="radio" value="saved" /> Usar referencia guardada: ${escapeHtml(currentUser.savedPaymentMethod.brand)} •••• ${escapeHtml(currentUser.savedPaymentMethod.lastFour)} <small>(solo simulación; no es una tarjeta reutilizable para cargos)</small></label>`
+                : ''
+            }
+            <label><input name="paymentSource" type="radio" value="new" checked /> Validar tarjeta sandbox</label>
+            <div class="payment-card-fields">
+              <label>Número de tarjeta de prueba
+                <input id="sandbox-card-number" type="tel" inputmode="numeric" autocomplete="off" placeholder="4242 4242 4242 4242" required />
+              </label>
+              <label>Vencimiento
+                <input id="sandbox-card-expiry" type="month" autocomplete="off" required />
+              </label>
+              <label>CVV de prueba
+                <input id="sandbox-card-cvv" type="password" inputmode="numeric" autocomplete="off" maxlength="3" placeholder="123" required />
+              </label>
+              <label><input name="saveCard" type="checkbox" /> Guardar referencia enmascarada para futuras simulaciones</label>
+            </div>
+          </fieldset>
           <div class="total-row"><span id="nights-label">Selecciona las fechas</span><strong id="booking-total">${formatMoney(0, listing.moneda)}</strong></div>
           <button class="primary-button" type="submit">Confirmar reserva</button>
         </form>
@@ -239,6 +258,26 @@ function renderDetails(listing) {
   const endInput = form.elements.fechaCheckout;
   const totalLabel = dialogContent.querySelector('#booking-total');
   const nightsLabel = dialogContent.querySelector('#nights-label');
+  const paymentSourceInputs = form.querySelectorAll(
+    'input[name="paymentSource"]',
+  );
+  const paymentCardFields = form.querySelector('.payment-card-fields');
+  const paymentCardInputs = [
+    form.querySelector('#sandbox-card-number'),
+    form.querySelector('#sandbox-card-expiry'),
+    form.querySelector('#sandbox-card-cvv'),
+  ];
+  function updatePaymentFields() {
+    const useSaved = form.elements.paymentSource.value === 'saved';
+    paymentCardFields.hidden = useSaved;
+    paymentCardInputs.forEach((input) => {
+      input.required = !useSaved;
+    });
+  }
+  paymentSourceInputs.forEach((input) =>
+    input.addEventListener('change', updatePaymentFields),
+  );
+  updatePaymentFields();
 
   function updateTotal() {
     endInput.min = startInput.value || localToday;
@@ -424,6 +463,28 @@ async function submitBooking(event) {
     window.BookingAuth.goToLogin('/marketplace/');
     return;
   }
+  const useSavedPayment =
+    form.elements.paymentSource.value === 'saved' &&
+    Boolean(currentUser?.savedPaymentMethod);
+  const cardNumber = form
+    .querySelector('#sandbox-card-number')
+    .value.replace(/\s/g, '');
+  if (!useSavedPayment) {
+    const expiry = form.querySelector('#sandbox-card-expiry').value;
+    const cvv = form.querySelector('#sandbox-card-cvv').value;
+    if (cardNumber !== '4242424242424242') {
+      showToast('Para esta simulación utiliza la tarjeta de prueba 4242 4242 4242 4242.');
+      return;
+    }
+    if (!isFutureMonth(expiry)) {
+      showToast('La fecha de vencimiento debe ser un mes futuro.');
+      return;
+    }
+    if (!/^\d{3}$/.test(cvv)) {
+      showToast('El CVV de prueba debe contener tres dígitos.');
+      return;
+    }
+  }
 
   const submitButton = form.querySelector('button[type="submit"]');
   const originalText = submitButton.textContent;
@@ -438,7 +499,7 @@ async function submitBooking(event) {
     fechaCheckin: formData.get('fechaCheckin').toString(),
     fechaCheckout: formData.get('fechaCheckout').toString(),
     numHuespedes: Number(formData.get('numHuespedes')),
-    metodoPagoSimulado: formData.get('metodoPagoSimulado').toString(),
+    metodoPagoSimulado: 'tarjeta',
   };
   const bookedAccommodation = selectedListing;
 
@@ -457,10 +518,30 @@ async function submitBooking(event) {
       return;
     }
     const body = await readResponse(response);
+    let savedCardWarning = '';
+    if (!useSavedPayment && form.elements.saveCard.checked) {
+      try {
+        const saveResponse = await fetch(`${API_BASE}/auth/me/payment-method`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${window.BookingAuth.token()}`,
+          },
+          body: JSON.stringify({ brand: 'Visa', lastFour: '4242' }),
+        });
+        const savedCard = await readResponse(saveResponse);
+        currentUser = {
+          ...currentUser,
+          savedPaymentMethod: savedCard.data.savedPaymentMethod,
+        };
+      } catch (error) {
+        savedCardWarning = ` La reserva se confirmó, pero no se guardó la referencia de tarjeta: ${error.message}`;
+      }
+    }
     detailDialog.close();
     successMessage.textContent = body.warning
-      ? `Tu reserva en ${bookedAccommodation.nombre} quedó confirmada. Aviso: ${body.warning}`
-      : `Tu reserva en ${bookedAccommodation.nombre} quedó confirmada. Puedes consultarla desde Mis reservas.`;
+      ? `Tu reserva en ${bookedAccommodation.nombre} quedó confirmada. Aviso: ${body.warning}${savedCardWarning}`
+      : `Tu reserva en ${bookedAccommodation.nombre} quedó confirmada. Puedes consultarla desde Mis reservas.${savedCardWarning}`;
     form.reset();
     selectedListing = null;
     successDialog.showModal();
@@ -470,6 +551,8 @@ async function submitBooking(event) {
       error.message || 'No se pudo completar la reserva. Inténtalo de nuevo.',
     );
   } finally {
+    form.querySelector('#sandbox-card-number').value = '';
+    form.querySelector('#sandbox-card-cvv').value = '';
     submitButton.disabled = false;
     submitButton.textContent = originalText;
   }
@@ -483,16 +566,26 @@ async function initializeMarketplace() {
   adminLink.hidden = true;
   profileLink.hidden = true;
   myBookingsLink.hidden = true;
+  favoriteIds = new Set();
+  currentUser = null;
   const token = window.BookingAuth.token();
   if (token) {
     try {
       const user = await window.BookingAuth.fetchProfile();
       if (user) {
+        currentUser = user;
         if (user.role === 'admin' || user.role === 'empleado') {
           adminLink.hidden = false;
         }
         profileLink.hidden = user.role !== 'cliente';
         myBookingsLink.hidden = user.role !== 'cliente';
+        if (user.role === 'cliente') {
+          try {
+            await refreshFavoriteIds();
+          } catch (error) {
+            showToast(error.message || 'No se pudieron cargar tus favoritos.');
+          }
+        }
       }
       if (user) {
         accountLink.textContent = 'Cerrar sesión';
@@ -539,13 +632,41 @@ document
 
 document.querySelector('#favorites-link').addEventListener('click', (event) => {
   event.preventDefault();
+  if (!window.BookingAuth.token()) {
+    window.BookingAuth.goToLogin('/marketplace/');
+    return;
+  }
   favoritesDialog.showModal();
   void loadFavorites();
 });
 
+async function refreshFavoriteIds() {
+  const response = await fetch(`${API_BASE}/favoritos`, {
+    headers: { Authorization: `Bearer ${window.BookingAuth.token()}` },
+  });
+  if (response.status === 401) {
+    window.BookingAuth.clearSession();
+    window.BookingAuth.goToLogin('/marketplace/');
+    return;
+  }
+  const body = await readResponse(response);
+  if (!Array.isArray(body?.data)) {
+    throw new Error('La API devolvió una lista de favoritos no válida.');
+  }
+  favoriteIds = new Set(body.data.filter((id) => typeof id === 'string'));
+  renderListings(currentListings);
+}
+
 async function loadFavorites() {
   favoritesStatus.textContent = 'Cargando favoritos…';
   favoritesList.replaceChildren();
+  try {
+    await refreshFavoriteIds();
+  } catch (error) {
+    favoritesStatus.textContent =
+      error.message || 'No se pudieron cargar tus favoritos.';
+    return;
+  }
   const ids = [...favoriteIds];
   if (!ids.length) {
     favoritesStatus.textContent = 'Aún no has guardado alojamientos favoritos.';
@@ -588,21 +709,38 @@ async function loadFavorites() {
   }
 }
 
-function saveFavoriteIds() {
-  try {
-    localStorage.setItem(FAVORITES_KEY, JSON.stringify([...favoriteIds]));
-  } catch (error) {
-    console.error('No se pudieron guardar los alojamientos favoritos.', error);
-    showToast('No se pudo guardar el favorito en este navegador.', true);
+async function toggleFavorite(id) {
+  if (!window.BookingAuth.token()) {
+    window.BookingAuth.goToLogin('/marketplace/');
+    return;
   }
-}
-
-function toggleFavorite(id) {
-  if (favoriteIds.has(id)) favoriteIds.delete(id);
+  const wasFavorite = favoriteIds.has(id);
+  const response = await fetch(
+    wasFavorite
+      ? `${API_BASE}/favoritos/${encodeURIComponent(id)}`
+      : `${API_BASE}/favoritos`,
+    {
+      method: wasFavorite ? 'DELETE' : 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${window.BookingAuth.token()}`,
+      },
+      ...(!wasFavorite
+        ? { body: JSON.stringify({ alojamientoId: id }) }
+        : {}),
+    },
+  );
+  if (response.status === 401) {
+    window.BookingAuth.clearSession();
+    window.BookingAuth.goToLogin('/marketplace/');
+    return;
+  }
+  await readResponse(response);
+  if (wasFavorite) favoriteIds.delete(id);
   else favoriteIds.add(id);
-  saveFavoriteIds();
   renderListings(currentListings);
   if (favoritesDialog.open) void loadFavorites();
+  showToast(wasFavorite ? 'Se quitó de favoritos.' : 'Se agregó a favoritos.');
 }
 
 grid.addEventListener('click', (event) => {
@@ -610,17 +748,27 @@ grid.addEventListener('click', (event) => {
   if (!button) return;
   event.stopPropagation();
   const id = button.dataset.favoriteId;
-  const wasFavorite = favoriteIds.has(id);
-  toggleFavorite(id);
-  showToast(
-    wasFavorite ? 'Se quitó de favoritos.' : 'Se agregó a favoritos.',
-  );
+  button.disabled = true;
+  void toggleFavorite(id)
+    .catch((error) =>
+      showToast(error.message || 'No se pudo actualizar el favorito.'),
+    )
+    .finally(() => {
+      button.disabled = false;
+    });
 });
 
 favoritesList.addEventListener('click', (event) => {
   const button = event.target.closest('[data-remove-favorite-id]');
   if (!button) return;
-  toggleFavorite(button.dataset.removeFavoriteId);
+  button.disabled = true;
+  void toggleFavorite(button.dataset.removeFavoriteId)
+    .catch((error) =>
+      showToast(error.message || 'No se pudo actualizar el favorito.'),
+    )
+    .finally(() => {
+      button.disabled = false;
+    });
 });
 
 myBookingsList.addEventListener('click', (event) => {
@@ -741,6 +889,7 @@ async function openBookingDetails(listing) {
       showToast('Inicia sesión con una cuenta de cliente para reservar.');
       return;
     }
+    currentUser = user;
     if (!user.fullName || !user.email || !user.phone) {
       pendingBookingListing = listing;
       profileForm.elements.fullName.value = user.fullName || '';

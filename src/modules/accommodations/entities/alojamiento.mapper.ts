@@ -10,8 +10,8 @@ import type { CreateAlojamientoDto } from '../dto/create-alojamiento.dto';
 import type { UpdateAlojamientoDto } from '../dto/update-alojamiento.dto';
 
 const DEFAULT_COORDINATES: CoordenadasEntity = {
-  latitud: -0.1807,
-  longitud: -78.4678,
+  latitud: -0.2202,
+  longitud: -78.5122,
 };
 const DEFAULT_PROVIDER_ID = '967fd210-4ab8-4efe-81f6-5cfbbfdf20b5';
 

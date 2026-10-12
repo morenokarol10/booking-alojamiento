@@ -12,7 +12,11 @@ import {
   SUPABASE_AUTH_CLIENT,
   SUPABASE_CLIENT,
 } from '../../supabase/supabase.module';
-import type { AuthenticatedUser, UserRole } from './auth.types';
+import type {
+  AuthenticatedUser,
+  SavedPaymentMethod,
+  UserRole,
+} from './auth.types';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
@@ -112,12 +116,14 @@ export class AuthService {
   }
 
   async updateProfile(user: AuthenticatedUser, dto: UpdateProfileDto) {
+    const existing = await this.getUserForProfileUpdate(user.id);
     const { data, error } = await this.adminSupabase.auth.admin.updateUserById(
       user.id,
       {
         email: dto.email.trim(),
         email_confirm: true,
         user_metadata: {
+          ...existing.user_metadata,
           role: user.role,
           full_name: dto.fullName.trim(),
           phone: dto.phone.trim(),
@@ -144,6 +150,49 @@ export class AuthService {
     };
   }
 
+  async savePaymentMethod(
+    user: AuthenticatedUser,
+    paymentMethod: SavedPaymentMethod,
+  ) {
+    const existing = await this.getUserForProfileUpdate(user.id);
+    const { data, error } = await this.adminSupabase.auth.admin.updateUserById(
+      user.id,
+      {
+        user_metadata: {
+          ...existing.user_metadata,
+          saved_payment_method: paymentMethod,
+        },
+      },
+    );
+    if (error || !data.user) {
+      this.logger.warn(
+        `No se pudo guardar la tarjeta de prueba para ${user.id} (código: ${error?.code ?? 'desconocido'}).`,
+      );
+      throw new InternalServerErrorException(
+        'No se pudo guardar la referencia segura de la tarjeta de prueba.',
+      );
+    }
+    return {
+      data: { savedPaymentMethod: paymentMethod },
+      message:
+        'Se guardó la marca y los últimos cuatro dígitos. No se almacenó ningún número completo ni CVV.',
+    };
+  }
+
+  private async getUserForProfileUpdate(userId: string) {
+    const { data, error } =
+      await this.adminSupabase.auth.admin.getUserById(userId);
+    if (error || !data.user) {
+      this.logger.warn(
+        `No se pudo consultar el perfil ${userId} antes de actualizarlo (código: ${error?.code ?? 'desconocido'}).`,
+      );
+      throw new InternalServerErrorException(
+        'No se pudo consultar el perfil antes de actualizarlo.',
+      );
+    }
+    return data.user;
+  }
+
   private mapUser(user: User): AuthenticatedUser {
     const role: UserRole =
       user.app_metadata?.role === 'admin'
@@ -162,13 +211,34 @@ export class AuthService {
       'phone_number',
       'telefono',
     ]);
+    const savedPaymentMethod = this.savedPaymentMethod(
+      user.user_metadata?.saved_payment_method,
+    );
     return {
       id: user.id,
       email: user.email ?? '',
       role,
       ...(fullName ? { fullName } : {}),
       ...(phone ? { phone } : {}),
+      ...(savedPaymentMethod ? { savedPaymentMethod } : {}),
     };
+  }
+
+  private savedPaymentMethod(value: unknown): SavedPaymentMethod | undefined {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+      return undefined;
+    }
+    const method = value as Record<string, unknown>;
+    if (
+      (method.brand !== 'Visa' &&
+        method.brand !== 'Mastercard' &&
+        method.brand !== 'Demo') ||
+      typeof method.lastFour !== 'string' ||
+      !/^\d{4}$/.test(method.lastFour)
+    ) {
+      return undefined;
+    }
+    return { brand: method.brand, lastFour: method.lastFour };
   }
 
   private metadataString(

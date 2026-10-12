@@ -54,7 +54,7 @@ de disponibilidad externa.
 | Panel de Administración funcional        | **Cumple en código; nube no verificada** | [public/admin/](./public/admin/), `GET /api/v1/admin/eventos`, CRUD protegido por guards `admin`                                                      |
 | Marketplace web funcional                | **Cumple en código; nube no verificada** | [public/](./public/), catálogo y filtros consumen `GET /api/v1/alojamientos`                                                                          |
 | APIs implementadas y documentadas        | **Cumple parcialmente**                  | Controladores NestJS, Swagger en `/api/docs` y contrato propio en `contracts/booking-ec-project.openapi.yaml`; el contrato GDS se conserva separado |
-| Base de datos operativa (3FN)            | **Parcial; no se acredita 3FN estricta** | [database/schema.sql](./database/schema.sql) define `alojamientos`, `reservas`, `eventos_log`; no crea tabla `proveedores`, `servicios` ni `imagenes` |
+| Base de datos operativa (3FN)            | **Parcial; no se acredita 3FN estricta** | [database/schema.sql](./database/schema.sql) define `alojamientos`, `reservas`, `eventos_log` y `favoritos`; no crea tabla `proveedores`, `servicios` ni `imagenes` |
 | Diseño API-First y contratos             |               **Parcial**                | Hay DTOs, validación y contrato oficial en [contracts/](./contracts/); los recursos y rutas locales no coinciden estrictamente con el contrato GDS    |
 | Endpoints para interoperabilidad         |     **Cumple en forma de respuesta**     | Mappers camelCase ↔ snake_case en `src/modules/*/entities/*mapper.ts`                                                                                 |
 | Arquitectura EDA / Orientada a Eventos   |         **Parcial / prototipo**          | `ReservaRealizadaEvent` se inserta en `eventos_log`; no existe broker, Outbox ni atomicidad reserva-evento                                            |
@@ -73,7 +73,7 @@ de disponibilidad externa.
    NestJS toma de este el título, la descripción, la versión y las etiquetas
    para Swagger, y genera las operaciones runtime desde los controladores.
    Son contratos distintos y no se declara que la API local implemente el GDS.
-2. El esquema actual contiene tres tablas de dominio. `proveedor_id` es un UUID
+2. El esquema actual contiene cuatro tablas de dominio. `proveedor_id` es un UUID
    sin tabla `proveedores` ni clave foránea en el script actual.
 3. `servicios` y `urls_imagenes` son arreglos PostgreSQL `TEXT[]`, no JSONB ni
    tablas relacionales propias. La API conserva `imagenes` en camelCase y el
@@ -264,6 +264,8 @@ La interfaz estática se sirve desde [public/](./public/) bajo
 - Calcular en el navegador un estimado por noches y enviar la reserva a
   `POST /api/v1/reservas`.
 - Iniciar sesión o registrarse como cliente para reservar.
+- Guardar favoritos por cuenta autenticada; se almacenan en Supabase y se
+  consultan con `GET /api/v1/favoritos`.
 - Consultar el historial personal desde **Mis reservas**; el endpoint
   `GET /api/v1/reservas/mis-reservas` filtra las filas por el usuario asociado
   al JWT validado.
@@ -279,10 +281,16 @@ Marketplace cierra y limpia el formulario, muestra **“¡Reserva realizada con
 éxito!”** y permite continuar explorando o consultar el historial.
 
 El acceso a **Mi Perfil** y **Mis reservas** son acciones separadas. El botón
-de corazón guarda o quita alojamientos de Favoritos en el almacenamiento local
-del navegador; no requiere autenticación ni crea una tabla adicional. Si falta
-información obligatoria en el perfil, se abre el formulario y al guardarlo se
-retoma el alojamiento elegido.
+de corazón requiere autenticación y guarda o quita favoritos asociados al ID
+del usuario en Supabase. Si falta información obligatoria en el perfil, se abre
+el formulario y al guardarlo se retoma el alojamiento elegido.
+
+El pago al reservar también es una simulación: el navegador solo acepta la
+tarjeta sandbox `4242 4242 4242 4242` y valida localmente vencimiento y CVV.
+La API recibe únicamente el método `tarjeta`; si se marca la opción de guardar,
+el perfil conserva solo la marca y los cuatro últimos dígitos como referencia
+visual. No se envían ni persisten el número completo, vencimiento o CVV y no
+existe procesamiento de cargos reales.
 
 Desde **Mis reservas**, el cliente puede cancelar una reserva confirmada que
 aún no haya iniciado. Para la demostración debe ingresar la tarjeta sandbox
@@ -316,6 +324,10 @@ esquema Bearer `supabase-jwt`.
 | `POST`   | `/api/v1/auth/login`            | Público                                   |
 | `GET`    | `/api/v1/auth/me`               | JWT válido                                |
 | `PUT`    | `/api/v1/auth/me`               | JWT válido; actualiza perfil              |
+| `PUT`    | `/api/v1/auth/me/payment-method`| JWT válido; solo guarda marca y últimos cuatro dígitos |
+| `GET`    | `/api/v1/favoritos`             | JWT válido; favoritos del usuario         |
+| `POST`   | `/api/v1/favoritos`             | JWT válido; agrega un alojamiento         |
+| `DELETE` | `/api/v1/favoritos/:alojamientoId` | JWT válido; elimina un favorito       |
 | `GET`    | `/api/v1/alojamientos`          | Público; filtros `ciudad`, `precioMaximo` |
 | `GET`    | `/api/v1/alojamientos/:id`      | Público                                   |
 | `POST`   | `/api/v1/alojamientos`          | `admin` o `empleado`                      |
@@ -352,6 +364,10 @@ y
 [20261009_rename_alojamientos_imagenes.sql](./database/migrations/20261009_rename_alojamientos_imagenes.sql)
 y
 [20261010_render_schema_cache.sql](./database/migrations/20261010_render_schema_cache.sql).
+La migración
+[202612100001_create_favoritos.sql](./database/migrations/202612100001_create_favoritos.sql)
+crea el almacenamiento de favoritos por usuario autenticado; ejecútala también
+en Supabase antes de habilitar esa función en el despliegue.
 Los scripts deben ejecutarse en Supabase con una cuenta autorizada.
 En Render, el despliegue del backend no ejecuta migraciones de Supabase. Para
 actualizar una base remota existente, ejecuta la migración
@@ -425,11 +441,12 @@ normalización estricta en 3FN. Para afirmar
 imágenes con relaciones y migrar los datos, manteniendo aparte el snapshot
 transaccional que se requiera en una reserva.
 
-El script aplica RLS a las tablas públicas: el catálogo es legible, pero las
-escrituras directas de `anon`/`authenticated` y el acceso directo a reservas y
-eventos se revocan. El servidor usa la clave service-role para acceder a datos
-solo después de autorizar la petición con NestJS. La clave service-role elude
-RLS y nunca debe enviarse al navegador.
+El script aplica RLS a las tablas públicas: el catálogo es legible, los
+favoritos quedan limitados a `auth.uid()`, y las escrituras directas de
+`anon`/`authenticated` y el acceso directo a reservas y eventos se revocan. El
+servidor usa la clave service-role para acceder a datos solo después de
+autorizar la petición con NestJS y filtra favoritos por el ID validado del JWT.
+La clave service-role elude RLS y nunca debe enviarse al navegador.
 
 ### 3.6 Diseño API-First e Interoperabilidad
 
@@ -548,7 +565,8 @@ No agregues `.env` al repositorio. `SUPABASE_KEY` es para los flujos de Auth;
    `database/migrations/20261007_contract_alignment.sql`,
    `database/migrations/20261008_auth_and_rls.sql`,
    `database/migrations/20261009_rename_alojamientos_imagenes.sql` y
-   `database/migrations/20261010_render_schema_cache.sql`, en ese orden.
+   `database/migrations/20261010_render_schema_cache.sql`, en ese orden; luego
+   ejecuta `database/migrations/202612100001_create_favoritos.sql`.
 3. Instala y compila:
 
    ```powershell

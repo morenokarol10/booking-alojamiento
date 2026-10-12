@@ -24,6 +24,7 @@ import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { SavePaymentMethodDto } from './dto/save-payment-method.dto';
 
 @ApiTags('Autenticación')
 @Controller('api/v1/auth')
@@ -79,5 +80,26 @@ export class AuthController {
       throw new UnauthorizedException('La sesión no está autenticada.');
     }
     return this.authService.updateProfile(request.user, dto);
+  }
+
+  @Put('me/payment-method')
+  @UseGuards(SupabaseAuthGuard)
+  @ApiBearerAuth('supabase-jwt')
+  @ApiOperation({
+    summary: 'Guardar la referencia enmascarada de una tarjeta de prueba',
+    description:
+      'Solo guarda marca y últimos cuatro dígitos; nunca recibe número completo ni CVV.',
+  })
+  @ApiResponse({ status: 200, description: 'Referencia guardada.' })
+  @ApiResponse({ status: 400, description: 'Referencia no válida.' })
+  @ApiUnauthorizedResponse({ description: 'Token ausente o no válido.' })
+  savePaymentMethod(
+    @Body() dto: SavePaymentMethodDto,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    if (!request.user) {
+      throw new UnauthorizedException('La sesión no está autenticada.');
+    }
+    return this.authService.savePaymentMethod(request.user, dto);
   }
 }

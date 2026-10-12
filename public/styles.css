@@ -636,6 +636,55 @@ input:focus-visible {
   grid-template-columns: 1fr 1fr;
   gap: 13px;
 }
+.booking-form .payment-demo {
+  grid-column: 1 / -1;
+  min-width: 0;
+  margin: 0;
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+}
+.payment-demo legend {
+  padding: 0 5px;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+}
+.payment-demo > p,
+.payment-demo small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.payment-demo > label,
+.payment-card-fields > label:last-child {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 8px 0;
+  font-weight: 500;
+}
+.payment-demo input[type='radio'],
+.payment-card-fields input[type='checkbox'] {
+  width: 16px;
+  min-height: 16px;
+  margin: 0;
+  flex: 0 0 auto;
+}
+.payment-card-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 10px;
+}
+.payment-card-fields[hidden] {
+  display: none;
+}
+.payment-card-fields > label:first-child,
+.payment-card-fields > label:last-child {
+  grid-column: 1 / -1;
+}
 .booking-form label {
   display: flex;
   flex-direction: column;

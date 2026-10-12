@@ -7,7 +7,11 @@ import {
 } from '@nestjs/common';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { SUPABASE_AUTH_CLIENT } from '../../supabase/supabase.module';
-import type { AuthenticatedRequest, UserRole } from './auth.types';
+import type {
+  AuthenticatedRequest,
+  SavedPaymentMethod,
+  UserRole,
+} from './auth.types';
 
 @Injectable()
 export class SupabaseAuthGuard implements CanActivate {
@@ -45,14 +49,35 @@ export class SupabaseAuthGuard implements CanActivate {
       'phone_number',
       'telefono',
     ]);
+    const savedPaymentMethod = this.savedPaymentMethod(
+      metadata?.saved_payment_method,
+    );
     request.user = {
       id: data.user.id,
       email: data.user.email ?? '',
       role,
       ...(fullName ? { fullName } : {}),
       ...(phone ? { phone } : {}),
+      ...(savedPaymentMethod ? { savedPaymentMethod } : {}),
     };
     return true;
+  }
+
+  private savedPaymentMethod(value: unknown): SavedPaymentMethod | undefined {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+      return undefined;
+    }
+    const method = value as Record<string, unknown>;
+    if (
+      (method.brand !== 'Visa' &&
+        method.brand !== 'Mastercard' &&
+        method.brand !== 'Demo') ||
+      typeof method.lastFour !== 'string' ||
+      !/^\d{4}$/.test(method.lastFour)
+    ) {
+      return undefined;
+    }
+    return { brand: method.brand, lastFour: method.lastFour };
   }
 
   private metadataString(

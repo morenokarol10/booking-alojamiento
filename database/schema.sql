@@ -1,7 +1,8 @@
 -- Esquema de Alojamientos para PostgreSQL / Supabase.
 -- Ejecutar en un proyecto nuevo o aplicar la migración si ya existía el
 -- esquema anterior: database/migrations/20261007_contract_alignment.sql y
--- database/migrations/20261008_auth_and_rls.sql
+-- database/migrations/20261008_auth_and_rls.sql. Para favoritos en una base
+-- existente, aplicar además database/migrations/202612100001_create_favoritos.sql.
 
 CREATE TABLE IF NOT EXISTS public.alojamientos (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -55,6 +56,16 @@ CREATE TABLE IF NOT EXISTS public.eventos_log (
   creado_en TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS public.favoritos (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  cliente_id UUID NOT NULL REFERENCES auth.users (id) ON DELETE CASCADE,
+  alojamiento_id UUID NOT NULL
+    REFERENCES public.alojamientos (id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT favoritos_cliente_alojamiento_unique
+    UNIQUE (cliente_id, alojamiento_id)
+);
+
 CREATE INDEX IF NOT EXISTS alojamientos_ciudad_idx
   ON public.alojamientos (ciudad);
 
@@ -72,19 +83,37 @@ CREATE INDEX IF NOT EXISTS reservas_fechas_idx
 
 CREATE INDEX IF NOT EXISTS eventos_log_creado_en_idx
   ON public.eventos_log (creado_en DESC);
+CREATE INDEX IF NOT EXISTS favoritos_cliente_created_at_idx
+  ON public.favoritos (cliente_id, created_at DESC);
 
 ALTER TABLE public.alojamientos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.reservas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.eventos_log ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.favoritos ENABLE ROW LEVEL SECURITY;
 
 REVOKE INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER
   ON public.alojamientos FROM anon, authenticated;
 GRANT SELECT ON public.alojamientos TO anon, authenticated;
 REVOKE ALL ON public.reservas, public.eventos_log FROM anon, authenticated;
+REVOKE ALL ON public.favoritos FROM anon;
+GRANT SELECT, INSERT, DELETE ON public.favoritos TO authenticated;
 
 DROP POLICY IF EXISTS alojamientos_public_read ON public.alojamientos;
 CREATE POLICY alojamientos_public_read
   ON public.alojamientos FOR SELECT TO anon, authenticated USING (true);
+
+DROP POLICY IF EXISTS favoritos_select_own ON public.favoritos;
+CREATE POLICY favoritos_select_own
+  ON public.favoritos FOR SELECT TO authenticated
+  USING (auth.uid() = cliente_id);
+DROP POLICY IF EXISTS favoritos_insert_own ON public.favoritos;
+CREATE POLICY favoritos_insert_own
+  ON public.favoritos FOR INSERT TO authenticated
+  WITH CHECK (auth.uid() = cliente_id);
+DROP POLICY IF EXISTS favoritos_delete_own ON public.favoritos;
+CREATE POLICY favoritos_delete_own
+  ON public.favoritos FOR DELETE TO authenticated
+  USING (auth.uid() = cliente_id);
 
 -- Alojamientos de ejemplo en destinos reales de Ecuador.
 INSERT INTO public.alojamientos (

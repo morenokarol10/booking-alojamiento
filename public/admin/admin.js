@@ -384,8 +384,6 @@ function openEditModal(listing) {
   ]) {
     listingForm.elements[field].value = listing[field] ?? '';
   }
-  listingForm.elements.latitud.value = listing.coordenadas?.latitud ?? '';
-  listingForm.elements.longitud.value = listing.coordenadas?.longitud ?? '';
   listingForm.elements.servicios.value = (listing.servicios || []).join(', ');
   listingForm.elements.imagenes.value = (listing.imagenes || []).join(', ');
   document.querySelector('#listing-modal-title').textContent =
@@ -416,20 +414,11 @@ listingForm.addEventListener('submit', async (event) => {
 
   const formData = new FormData(listingForm);
   const id = String(formData.get('id') || '');
-  const latitud = String(formData.get('latitud') || '').trim();
-  const longitud = String(formData.get('longitud') || '').trim();
   const payload = {
     nombre: String(formData.get('nombre')).trim(),
     tipo: formData.get('tipo'),
     ciudad: String(formData.get('ciudad')).trim(),
     direccion: String(formData.get('direccion')).trim(),
-    coordenadas:
-      latitud || longitud
-        ? {
-            ...(latitud ? { latitud: Number(latitud) } : {}),
-            ...(longitud ? { longitud: Number(longitud) } : {}),
-          }
-        : undefined,
     precioBaseNoche: Number(formData.get('precioBaseNoche')),
     moneda: String(formData.get('moneda')).trim().toUpperCase(),
     capacidadMaxima: Number(formData.get('capacidadMaxima')),

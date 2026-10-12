@@ -113,6 +113,9 @@ export class ReservationsService {
       .single();
 
     if (reservaError) {
+      this.logger.error(
+        `No se pudo insertar la reserva (código Supabase: ${reservaError.code ?? 'desconocido'}).`,
+      );
       throw new InternalServerErrorException({
         statusCode: 500,
         message: 'No se pudo registrar la reserva.',

@@ -74,6 +74,19 @@ describe('AuthService', () => {
   });
 
   it('updates profile metadata without changing the trusted app role', async () => {
+    const savedPaymentMethod = { brand: 'Visa', lastFour: '4242' };
+    const getUserById = jest.fn().mockResolvedValue({
+      data: {
+        user: {
+          id: '50000000-0000-4000-8000-000000000001',
+          user_metadata: {
+            role: 'empleado',
+            saved_payment_method: savedPaymentMethod,
+          },
+        },
+      },
+      error: null,
+    });
     const updateUserById = jest.fn().mockResolvedValue({
       data: {
         user: {
@@ -81,14 +94,16 @@ describe('AuthService', () => {
           email: 'nuevo@example.com',
           app_metadata: { role: 'empleado' },
           user_metadata: {
+            role: 'empleado',
             full_name: 'Nombre Actualizado',
             phone: '+593991111111',
+            saved_payment_method: savedPaymentMethod,
           },
         },
       },
       error: null,
     });
-    const service = makeService({}, { updateUserById });
+    const service = makeService({}, { getUserById, updateUserById });
 
     const response = await service.updateProfile(
       {
@@ -112,6 +127,7 @@ describe('AuthService', () => {
           role: 'empleado',
           full_name: 'Nombre Actualizado',
           phone: '+593991111111',
+          saved_payment_method: savedPaymentMethod,
         },
       }),
     );
@@ -119,6 +135,66 @@ describe('AuthService', () => {
       role: 'empleado',
       fullName: 'Nombre Actualizado',
       phone: '+593991111111',
+    });
+  });
+
+  it('stores only masked card metadata and preserves existing profile metadata', async () => {
+    const updateUserById = jest.fn().mockResolvedValue({
+      data: {
+        user: {
+          id: '50000000-0000-4000-8000-000000000001',
+          email: 'cliente@example.com',
+          app_metadata: {},
+          user_metadata: {
+            full_name: 'María Pérez',
+            phone: '+593991234567',
+            saved_payment_method: { brand: 'Visa', lastFour: '4242' },
+          },
+        },
+      },
+      error: null,
+    });
+    const service = makeService(
+      {},
+      {
+        getUserById: jest.fn().mockResolvedValue({
+          data: {
+            user: {
+              id: '50000000-0000-4000-8000-000000000001',
+              user_metadata: {
+                full_name: 'María Pérez',
+                phone: '+593991234567',
+              },
+            },
+          },
+          error: null,
+        }),
+        updateUserById,
+      },
+    );
+
+    const response = await service.savePaymentMethod(
+      {
+        id: '50000000-0000-4000-8000-000000000001',
+        email: 'cliente@example.com',
+        role: 'cliente',
+      },
+      { brand: 'Visa', lastFour: '4242' },
+    );
+
+    expect(updateUserById).toHaveBeenCalledWith(
+      '50000000-0000-4000-8000-000000000001',
+      {
+        user_metadata: {
+          full_name: 'María Pérez',
+          phone: '+593991234567',
+          saved_payment_method: { brand: 'Visa', lastFour: '4242' },
+        },
+      },
+    );
+    expect(response.data.savedPaymentMethod).toEqual({
+      brand: 'Visa',
+      lastFour: '4242',
     });
   });
 

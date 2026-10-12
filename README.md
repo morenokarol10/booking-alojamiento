@@ -26,7 +26,8 @@ EDA.
 | Autenticación                     | Supabase Auth, JWT Bearer y roles `cliente` / `admin`                    |
 | Marketplace                       | [`/marketplace/`](https://booking-alojamiento.onrender.com/marketplace/) |
 | Panel Admin                       | [`/admin/`](https://booking-alojamiento.onrender.com/admin/)             |
-| Swagger generado                  | [`/api/docs`](https://booking-alojamiento.onrender.com/api/docs)         |
+| Swagger contrato GDS              | [`/api/docs`](https://booking-alojamiento.onrender.com/api/docs)         |
+| Swagger API del proyecto          | [`/api/project-docs`](https://booking-alojamiento.onrender.com/api/project-docs) |
 | Resultado de verificación externa | HTTP 503 en Marketplace y Swagger JSON al 2026-10-07                     |
 
 El repositorio contiene un [Dockerfile](./Dockerfile), un blueprint de Render
@@ -293,11 +294,18 @@ simulada. No se procesa dinero ni se realiza una devolución financiera real.
 
 ### 3.4 APIs y Documentación Swagger/OpenAPI
 
-Swagger se publica en `/api/docs`. La aplicación carga en runtime los
-metadatos `info` y `tags` del contrato propio
-`contracts/booking-ec-project.openapi.yaml`, y genera el documento operativo
-desde los controladores y DTOs NestJS. El contrato GDS
-`contracts/alojamientos-openapi.yaml` no se modifica. Los métodos protegidos indican el
+`/api/docs` carga íntegramente el contrato GDS
+`contracts/alojamientos-openapi.yaml` en Swagger UI, incluyendo sus rutas,
+métodos, esquemas, seguridad y etiquetas. Las operaciones tienen habilitado
+**Try it out**. La API REST propia del prototipo, generada desde sus
+controladores NestJS y DTOs, se consulta por separado en `/api/project-docs`.
+El contrato GDS se conserva sin cambios; el contrato propio del proyecto se
+mantiene en `contracts/booking-ec-project.openapi.yaml`.
+
+Las operaciones GDS de `/api/docs` se envían a los servidores declarados en el
+YAML (`api.booking-hub.com` y `sandbox.api.booking-hub.com`). Esos paths no son
+implementaciones locales de este prototipo; para probar las rutas reales de
+Booking EC, utiliza `/api/project-docs`. Los métodos protegidos indican el
 esquema Bearer `supabase-jwt`.
 
 #### Endpoints del prototipo

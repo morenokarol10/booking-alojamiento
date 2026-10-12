@@ -116,13 +116,18 @@ export class ReservationsService {
       this.logger.error(
         `No se pudo insertar la reserva (código Supabase: ${reservaError.code ?? 'desconocido'}).`,
       );
-      const missingClientId =
+      const missingDatabaseColumn =
         (reservaError.code === 'PGRST204' || reservaError.code === '42703') &&
-        /cliente_id/i.test(reservaError.message);
+        /cliente_id|metodo_pago_simulado/i.test(reservaError.message);
+      const schemaMigration = /metodo_pago_simulado/i.test(
+        reservaError.message,
+      )
+        ? '20261012_reservas_payment_method.sql'
+        : '20261011_booking_admin_schema.sql';
       throw new InternalServerErrorException({
         statusCode: 500,
-        message: missingClientId
-          ? 'El esquema de Supabase no tiene la columna reservas.cliente_id. Ejecuta database/migrations/20261011_booking_admin_schema.sql y vuelve a intentarlo.'
+        message: missingDatabaseColumn
+          ? `El esquema de Supabase no tiene una columna necesaria de reservas. Ejecuta database/migrations/${schemaMigration} en el SQL Editor de Supabase y vuelve a intentarlo.`
           : 'No se pudo registrar la reserva.',
         error: reservaError.message,
       });

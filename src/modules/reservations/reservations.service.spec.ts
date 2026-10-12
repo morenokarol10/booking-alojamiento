@@ -79,11 +79,21 @@ describe('ReservationsService payment and event flow', () => {
   });
 
   it.each([
-    ['cliente_id', '20261011_booking_admin_schema.sql'],
-    ['metodo_pago_simulado', '20261012_reservas_payment_method.sql'],
+    ['cliente_id', 'PGRST204', '20261013_atomic_booking_availability.sql'],
+    [
+      'metodo_pago_simulado',
+      'PGRST204',
+      '20261013_atomic_booking_availability.sql',
+    ],
+    ['pago_estado', '42703', '20261013_atomic_booking_availability.sql'],
+    [
+      'book_accommodation_if_available',
+      'PGRST202',
+      '20261013_atomic_booking_availability.sql',
+    ],
   ])(
-    'explains how to repair Supabase when reservas.%s is missing',
-    async (column, migration) => {
+    'explains how to repair Supabase when %s is missing',
+    async (column, code, migration) => {
       const accommodation = {
         id: '10000000-0000-4000-8000-000000000001',
         precio_base_noche: 85,
@@ -92,30 +102,23 @@ describe('ReservationsService payment and event flow', () => {
         habitaciones_disponibles: 1,
       };
       const missingColumnError = {
-        code: 'PGRST204',
-        message: `Could not find the '${column}' column of 'reservas' in the schema cache`,
+        code,
+        message:
+          column === 'book_accommodation_if_available'
+            ? `Could not find the function public.${column} in the schema cache`
+            : `Could not find the '${column}' column of 'reservas' in the schema cache`,
       };
-      let reservationQueryCount = 0;
       const supabaseStub = {
         from: (table: string) => {
-          if (table === 'alojamientos') {
-            return new QueryMock({ data: accommodation, error: null }, () => ({
-              data: null,
-              error: null,
-            }));
-          }
-          reservationQueryCount += 1;
-          if (reservationQueryCount === 1) {
-            return new QueryMock({ data: [], error: null }, () => ({
-              data: null,
-              error: null,
-            }));
-          }
-          return new QueryMock(
-            { data: null, error: missingColumnError },
-            () => ({ data: null, error: missingColumnError }),
-          );
+          expect(table).toBe('alojamientos');
+          return new QueryMock({ data: accommodation, error: null }, () => ({
+            data: null,
+            error: null,
+          }));
         },
+        rpc: () => ({
+          single: async () => ({ data: null, error: missingColumnError }),
+        }),
       } as unknown as SupabaseClient;
       const service = new ReservationsService(supabaseStub);
 
@@ -140,12 +143,66 @@ describe('ReservationsService payment and event flow', () => {
     },
   );
 
+  it('rejects reservations when Supabase reports no rooms for the requested dates', async () => {
+    const accommodation = {
+      id: '10000000-0000-4000-8000-000000000001',
+      precio_base_noche: 85,
+      moneda: 'USD',
+      capacidad_maxima: 4,
+      habitaciones_disponibles: 1,
+    };
+    const supabaseStub = {
+      from: (table: string) => {
+        expect(table).toBe('alojamientos');
+        return new QueryMock({ data: accommodation, error: null }, () => ({
+          data: null,
+          error: null,
+        }));
+      },
+      rpc: jest.fn(
+        (functionName: string, parameters: Record<string, unknown>) => {
+          expect(functionName).toBe('book_accommodation_if_available');
+          expect(parameters).toMatchObject({
+            p_alojamiento_id: accommodation.id,
+            p_fecha_checkin: '2026-11-10',
+            p_fecha_checkout: '2026-11-13',
+          });
+          return {
+            single: async () => ({
+              data: null,
+              error: { code: 'P0001', message: 'NO_ROOMS_AVAILABLE' },
+            }),
+          };
+        },
+      ),
+    } as unknown as SupabaseClient;
+    const service = new ReservationsService(supabaseStub);
+
+    await expect(
+      service.create(
+        {
+          alojamientoId: accommodation.id,
+          fechaCheckin: '2026-11-10',
+          fechaCheckout: '2026-11-13',
+          numHuespedes: 2,
+          metodoPagoSimulado: 'tarjeta',
+        },
+        {
+          id: '50000000-0000-4000-8000-000000000001',
+          email: 'maria@example.com',
+          role: 'cliente',
+          fullName: 'María Pérez',
+          phone: '+593991234567',
+        },
+      ),
+    ).rejects.toThrow(/no hay habitaciones disponibles/i);
+  });
+
   it('supports multiple reservations and writes one EDA event per successful reservation', async () => {
     const inserts: Record<string, unknown[]> = {
       reservas: [],
       eventos_log: [],
     };
-    let reservationsQueryCount = 0;
     const accommodation = {
       id: '10000000-0000-4000-8000-000000000001',
       precio_base_noche: 85,
@@ -181,19 +238,6 @@ describe('ReservationsService payment and event flow', () => {
             error: null,
           }));
         }
-        if (table === 'reservas') {
-          reservationsQueryCount += 1;
-          if (reservationsQueryCount === 1) {
-            return new QueryMock({ data: [], error: null }, () => ({
-              data: null,
-              error: null,
-            }));
-          }
-          return new QueryMock(reservationQueryResult, (value) => {
-            inserts.reservas.push(value);
-            return reservationQueryResult;
-          });
-        }
         if (table === 'eventos_log') {
           return {
             insert: (value: unknown) => {
@@ -204,6 +248,12 @@ describe('ReservationsService payment and event flow', () => {
         }
         throw new Error(`Unexpected Supabase table: ${table}`);
       },
+      rpc: jest.fn((_functionName: string, parameters: unknown) => {
+        inserts.reservas.push(parameters);
+        return {
+          single: async () => reservationQueryResult,
+        };
+      }),
     } as unknown as SupabaseClient;
     const service = new ReservationsService(supabaseStub);
 
@@ -225,16 +275,14 @@ describe('ReservationsService payment and event flow', () => {
     );
 
     expect(inserts.reservas[0]).toMatchObject({
-      alojamiento_id: accommodation.id,
-      cliente_id: '50000000-0000-4000-8000-000000000001',
-      cliente_nombre: 'María Pérez',
-      fecha_checkin: '2026-11-10',
-      fecha_checkout: '2026-11-13',
-      num_huespedes: 2,
-      precio_total: 255,
-      metodo_pago_simulado: 'tarjeta',
-      pago_estado: 'exitoso',
-      estado: 'confirmada',
+      p_alojamiento_id: accommodation.id,
+      p_cliente_id: '50000000-0000-4000-8000-000000000001',
+      p_cliente_nombre: 'María Pérez',
+      p_fecha_checkin: '2026-11-10',
+      p_fecha_checkout: '2026-11-13',
+      p_num_huespedes: 2,
+      p_precio_total: 255,
+      p_metodo_pago_simulado: 'tarjeta',
     });
     expect(inserts.eventos_log[0]).toMatchObject({
       tipo_evento: 'ReservaRealizadaEvent',

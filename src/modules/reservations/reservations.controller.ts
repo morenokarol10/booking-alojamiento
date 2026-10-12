@@ -54,8 +54,11 @@ export class ReservationsController {
     type: ReservaResponseDto,
   })
   @ApiBadRequestResponse({
+    description: 'Datos inválidos o el alojamiento excede su capacidad.',
+  })
+  @ApiConflictResponse({
     description:
-      'Datos inválidos, fechas ocupadas o alojamiento no disponible.',
+      'Ya no hay habitaciones disponibles para el alojamiento en las fechas solicitadas.',
   })
   @ApiNotFoundResponse({ description: 'Alojamiento no encontrado.' })
   @ApiResponse({ status: 500, description: 'Error al crear la reserva.' })

@@ -66,73 +66,85 @@ export class ReservationsService {
       );
     }
 
-    const { data: reservasExistentes, error: disponibilidadError } =
-      await this.supabase
-        .from('reservas')
-        .select('id')
-        .eq('alojamiento_id', dto.alojamientoId)
-        .neq('estado', 'cancelada')
-        .lt('fecha_checkin', dto.fechaCheckout)
-        .gt('fecha_checkout', dto.fechaCheckin);
-
-    if (disponibilidadError) {
-      throw new InternalServerErrorException({
-        statusCode: 500,
-        message: 'No se pudo comprobar la disponibilidad de fechas.',
-        error: disponibilidadError.message,
-      });
-    }
-    if (
-      (reservasExistentes?.length ?? 0) >=
-      Number(alojamiento.habitaciones_disponibles)
-    ) {
-      throw new BadRequestException(
-        'No hay habitaciones disponibles para esas fechas.',
-      );
-    }
-
     const precioTotal =
       Math.round(Number(alojamiento.precio_base_noche) * nights * 100) / 100;
     const pagoReferencia = randomUUID();
 
     // Simulación local: no se contacta una pasarela ni se procesa dinero real.
+    const reservaDatabase = toReservaDatabase(dto, {
+      precioTotal,
+      moneda: String(alojamiento.moneda),
+      pagoReferencia,
+      clienteId: user.id,
+      clienteNombre,
+      clienteEmail,
+      clienteTelefono,
+    });
     const { data: reserva, error: reservaError } = await this.supabase
-      .from('reservas')
-      .insert(
-        toReservaDatabase(dto, {
-          precioTotal,
-          moneda: String(alojamiento.moneda),
-          pagoReferencia,
-          clienteId: user.id,
-          clienteNombre,
-          clienteEmail,
-          clienteTelefono,
-        }),
-      )
-      .select('*')
+      .rpc('book_accommodation_if_available', {
+        p_alojamiento_id: reservaDatabase.alojamiento_id,
+        p_cliente_id: reservaDatabase.cliente_id,
+        p_cliente_nombre: reservaDatabase.cliente_nombre,
+        p_cliente_email: reservaDatabase.cliente_email,
+        p_cliente_telefono: reservaDatabase.cliente_telefono,
+        p_fecha_checkin: reservaDatabase.fecha_checkin,
+        p_fecha_checkout: reservaDatabase.fecha_checkout,
+        p_num_huespedes: reservaDatabase.num_huespedes,
+        p_precio_total: reservaDatabase.precio_total,
+        p_moneda: reservaDatabase.moneda,
+        p_metodo_pago_simulado: reservaDatabase.metodo_pago_simulado,
+        p_pago_referencia: reservaDatabase.pago_referencia,
+      })
       .single();
 
     if (reservaError) {
       this.logger.error(
         `No se pudo insertar la reserva (código Supabase: ${reservaError.code ?? 'desconocido'}).`,
       );
-      const missingDatabaseColumn =
-        (reservaError.code === 'PGRST204' || reservaError.code === '42703') &&
-        /cliente_id|metodo_pago_simulado/i.test(reservaError.message);
-      const schemaMigration = /metodo_pago_simulado/i.test(
-        reservaError.message,
-      )
-        ? '20261012_reservas_payment_method.sql'
-        : '20261011_booking_admin_schema.sql';
+      if (
+        reservaError.code === 'P0001' &&
+        reservaError.message === 'NO_ROOMS_AVAILABLE'
+      ) {
+        throw new ConflictException(
+          'No hay habitaciones disponibles para esas fechas. Elige otras fechas o consulta otro alojamiento.',
+        );
+      }
+      if (
+        reservaError.code === 'P0002' &&
+        reservaError.message === 'ACCOMMODATION_NOT_FOUND'
+      ) {
+        throw new NotFoundException(
+          `No existe el alojamiento ${dto.alojamientoId}.`,
+        );
+      }
+      if (
+        reservaError.code === '22023' &&
+        reservaError.message === 'GUEST_CAPACITY_EXCEEDED'
+      ) {
+        throw new BadRequestException(
+          'El número de huéspedes supera la capacidad máxima del alojamiento.',
+        );
+      }
+
+      const schemaOutOfDate =
+        ['PGRST202', 'PGRST204', '42703'].includes(reservaError.code ?? '') &&
+        /book_accommodation_if_available|cliente_id|metodo_pago_simulado|pago_estado/i.test(
+          reservaError.message,
+        );
       throw new InternalServerErrorException({
         statusCode: 500,
-        message: missingDatabaseColumn
-          ? `El esquema de Supabase no tiene una columna necesaria de reservas. Ejecuta database/migrations/${schemaMigration} en el SQL Editor de Supabase y vuelve a intentarlo.`
+        message: schemaOutOfDate
+          ? 'Supabase aún no tiene actualizado el esquema de reservas o la función de disponibilidad. Ejecuta database/migrations/20261013_atomic_booking_availability.sql en el SQL Editor de Supabase y vuelve a intentarlo.'
           : 'No se pudo registrar la reserva.',
         error: reservaError.message,
       });
     }
 
+    if (!isDatabaseRow(reserva)) {
+      throw new InternalServerErrorException(
+        'Supabase no devolvió la reserva creada.',
+      );
+    }
     const reservaEntity = toReservaEntity(reserva);
     const eventPayload = {
       eventId: randomUUID(),
@@ -318,4 +330,8 @@ export class ReservationsService {
     const endTime = Date.parse(`${end}T00:00:00Z`);
     return (endTime - startTime) / 86_400_000;
   }
+}
+
+function isDatabaseRow(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

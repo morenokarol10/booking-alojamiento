@@ -1,0 +1,335 @@
+syntax = "proto3";
+
+package alojamientos.v1;
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+service AlojamientosService {
+  rpc SearchAccommodations(SearchAccommodationRequest) returns (SearchAccommodationResponse);
+  rpc GetAvailability(AvailabilityRequest) returns (AvailabilityResponse);
+  rpc GetBulkAvailability(BulkAvailabilityRequest) returns (BulkAvailabilityResponse);
+  rpc GetAccommodationDetails(AccommodationDetailsRequest) returns (AccommodationDetailsResponse);
+  rpc GetDetailsChanges(DetailsChangesRequest) returns (DetailsChangesResponse);
+  rpc ListChains(google.protobuf.Empty) returns (ChainsResponse);
+  rpc GetConstants(ConstantsRequest) returns (ConstantsResponse);
+  rpc GetReviews(ReviewsRequest) returns (ReviewsResponse);
+  rpc GetReviewScores(ReviewsScoresRequest) returns (ReviewsScoresResponse);
+  rpc PreviewOrder(OrderPreviewRequest) returns (OrderPreviewResponse);
+  rpc CreateOrder(CreateOrderRequest) returns (OrderDetail);
+  rpc GetOrder(GetOrderRequest) returns (OrderDetail);
+  rpc ModifyOrder(ModifyOrderRequest) returns (OrderDetail);
+  rpc CancelOrder(CancelOrderRequest) returns (google.protobuf.Empty);
+  rpc ListWebhooks(google.protobuf.Empty) returns (ListWebhooksResponse);
+  rpc CreateWebhook(WebhookSubscription) returns (WebhookSubscription);
+  rpc DeleteWebhook(DeleteWebhookRequest) returns (google.protobuf.Empty);
+}
+
+message ProblemDetails {
+  string type = 1;
+  string title = 2;
+  int32 status = 3;
+  string detail = 4;
+  ErrorCode code = 5;
+  repeated InvalidParam invalid_params = 6;
+
+  enum ErrorCode {
+    ERROR_CODE_UNSPECIFIED = 0;
+    VALIDATION_FAILED = 1;
+    ROOM_NO_LONGER_AVAILABLE = 2;
+    PRICE_CHANGED = 3;
+    BOOKING_NOT_CONFIRMED = 4;
+    CANCELLATION_NOT_ALLOWED = 5;
+    RATE_LIMIT_EXCEEDED = 6;
+    PAYMENT_REFERENCE_INVALID = 7;
+    PAYMENT_NOT_AUTHORIZED = 8;
+  }
+}
+
+message InvalidParam {
+  string name = 1;
+  string reason = 2;
+}
+
+message Booker {
+  string country = 1;
+  Platform platform = 2;
+  string state = 3;
+  TravelPurpose travel_purpose = 4;
+  repeated UserGroup user_groups = 5;
+
+  enum Platform {
+    PLATFORM_UNSPECIFIED = 0;
+    ANDROID = 1;
+    DESKTOP = 2;
+    IOS = 3;
+    MOBILE = 4;
+    TABLET = 5;
+  }
+
+  enum TravelPurpose {
+    TRAVEL_PURPOSE_UNSPECIFIED = 0;
+    BUSINESS = 1;
+    LEISURE = 2;
+  }
+
+  enum UserGroup {
+    USER_GROUP_UNSPECIFIED = 0;
+    AUTHENTICATED = 1;
+  }
+}
+
+message AccommodationsGuests {
+  int32 number_of_adults = 1;
+  int32 number_of_rooms = 2;
+  repeated int32 children = 3;
+  repeated RoomAllocation allocation = 4;
+
+  message RoomAllocation {
+    int32 adults = 1;
+    repeated int32 children = 2;
+  }
+}
+
+message SearchAccommodationRequest {
+  Booker booker = 1;
+  string checkin = 2;
+  string checkout = 3;
+  int32 city = 4;
+  string country = 5;
+  AccommodationsGuests guests = 6;
+  repeated string extras = 7;
+  string currency = 8;
+  int32 rows = 9;
+  string page = 10;
+  string x_device_fingerprint = 11;
+}
+
+message SearchAccommodationResponse {
+  string request_id = 1;
+  repeated AccommodationSearchResult data = 2;
+  optional string next_page = 3;
+}
+
+message AccommodationSearchResult {
+  int32 id = 1;
+  string url = 2;
+}
+
+message AvailabilityRequest {
+  int32 accommodation = 1;
+  Booker booker = 2;
+  string checkin = 3;
+  string checkout = 4;
+  AccommodationsGuests guests = 5;
+  string currency = 6;
+  repeated string extras = 7;
+}
+
+message AvailabilityResponse {
+  string request_id = 1;
+  AvailabilityData data = 2;
+}
+
+message AvailabilityData {
+  int32 id = 1;
+  string currency = 2;
+  repeated google.protobuf.Struct products = 3;
+  string url = 4;
+}
+
+message BulkAvailabilityRequest {
+  repeated int32 accommodations = 1;
+  Booker booker = 2;
+  string checkin = 3;
+  string checkout = 4;
+  AccommodationsGuests guests = 5;
+  AvailabilityFilters filters = 6;
+  string currency = 7;
+  repeated string extras = 8;
+}
+
+message AvailabilityFilters {
+  string meal_plan = 1;
+  string cancellation_type = 2;
+}
+
+message BulkAvailabilityResponse {
+  string request_id = 1;
+  repeated google.protobuf.Struct data = 2;
+}
+
+message AccommodationDetailsRequest {
+  repeated int32 accommodations = 1;
+  int32 city = 2;
+  string country = 3;
+  repeated string extras = 4;
+  repeated string languages = 5;
+}
+
+message AccommodationDetailsResponse {
+  string request_id = 1;
+  repeated google.protobuf.Struct data = 2;
+  optional string next_page = 3;
+}
+
+message DetailsChangesRequest {
+  google.protobuf.Timestamp last_change = 1;
+  DetailsChangesFilters filters = 2;
+}
+
+message DetailsChangesFilters {
+  repeated string countries = 1;
+  repeated int32 cities = 2;
+}
+
+message DetailsChangesResponse {
+  string request_id = 1;
+  DetailsChangesData data = 2;
+}
+
+message DetailsChangesData {
+  google.protobuf.Timestamp from = 1;
+  google.protobuf.Timestamp next = 2;
+  int32 total_changes = 3;
+  google.protobuf.Struct changes = 4;
+}
+
+message ChainsResponse {
+  string request_id = 1;
+  repeated HotelChain data = 2;
+}
+
+message HotelChain {
+  int32 id = 1;
+  string name = 2;
+  repeated google.protobuf.Struct brands = 3;
+}
+
+message ConstantsRequest {
+  repeated string languages = 1;
+  repeated string constants = 2;
+}
+
+message ConstantsResponse {
+  string request_id = 1;
+  google.protobuf.Struct data = 2;
+}
+
+message ReviewsRequest {
+  repeated int32 accommodations = 1;
+  repeated string languages = 2;
+  string page = 3;
+  int32 rows = 4;
+}
+
+message ReviewsResponse {
+  string request_id = 1;
+  repeated google.protobuf.Struct data = 2;
+  string next_page = 3;
+}
+
+message ReviewsScoresRequest {
+  repeated int32 accommodations = 1;
+  repeated string languages = 2;
+}
+
+message ReviewsScoresResponse {
+  string request_id = 1;
+  repeated google.protobuf.Struct data = 2;
+}
+
+message OrderPreviewRequest {
+  int32 accommodation_id = 1;
+  string product_id = 2;
+  AccommodationsGuests guests = 3;
+}
+
+message OrderPreviewResponse {
+  string request_id = 1;
+  OrderPreviewData data = 2;
+}
+
+message OrderPreviewData {
+  string order_preview_id = 1;
+  double total_price = 2;
+  string currency = 3;
+}
+
+message CreateOrderRequest {
+  string order_preview_id = 1;
+  string payment_reference = 2;
+  CustomerDetails customer_details = 3;
+  string idempotency_key = 4;
+}
+
+message CustomerDetails {
+  string first_name = 1;
+  string last_name = 2;
+  string email = 3;
+}
+
+message OrderDetail {
+  string order_id = 1;
+  string locator = 2;
+  OrderStatus status = 3;
+  google.protobuf.Struct accommodation_details = 4;
+  double total_price = 5;
+  string currency = 6;
+  google.protobuf.Timestamp creation_date = 7;
+  map<string, string> links = 8;
+
+  enum OrderStatus {
+    ORDER_STATUS_UNSPECIFIED = 0;
+    CONFIRMED = 1;
+    CANCELLED = 2;
+    PENDING = 3;
+  }
+}
+
+message GetOrderRequest {
+  string order_id = 1;
+}
+
+message ModifyOrderRequest {
+  string order_id = 1;
+  AccommodationsGuests guests = 2;
+  string checkin = 3;
+  string checkout = 4;
+  string idempotency_key = 5;
+}
+
+message CancelOrderRequest {
+  string order_id = 1;
+  string idempotency_key = 2;
+}
+
+message WebhookSubscription {
+  string id = 1;
+  string url = 2;
+  repeated WebhookEvent events = 3;
+  string secret = 4;
+
+  enum WebhookEvent {
+    WEBHOOK_EVENT_UNSPECIFIED = 0;
+    ORDER_CONFIRMED = 1;
+    ORDER_CANCELLED = 2;
+  }
+}
+
+message ListWebhooksResponse {
+  repeated WebhookSubscription subscriptions = 1;
+}
+
+message DeleteWebhookRequest {
+  string id = 1;
+}
+
+message WebhookPayload {
+  string event_id = 1;
+  string event_type = 2;
+  google.protobuf.Timestamp timestamp = 3;
+  string resource_id = 4;
+  google.protobuf.Struct data = 5;
+}

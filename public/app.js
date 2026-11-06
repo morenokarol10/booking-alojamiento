@@ -225,6 +225,21 @@ function renderDetails(listing) {
           <label>Número de huéspedes
             <input name="numHuespedes" type="number" min="1" max="${Number(listing.capacidadMaxima)}" value="1" required />
           </label>
+          <section class="booking-customer full-width" aria-label="Datos de tu cuenta">
+            <h3>Reserva a nombre de</h3>
+            <div class="booking-user-fields">
+              <label>Nombre completo
+                <input type="text" value="${escapeHtml(currentUser.fullName)}" autocomplete="name" readonly />
+              </label>
+              <label>Correo electrónico
+                <input type="email" value="${escapeHtml(currentUser.email)}" autocomplete="email" readonly />
+              </label>
+              <label>Teléfono
+                <input type="tel" value="${escapeHtml(currentUser.phone)}" autocomplete="tel" readonly />
+              </label>
+            </div>
+            <p>Estos datos se tomarán de tu perfil autenticado.</p>
+          </section>
           <fieldset class="payment-demo">
             <legend>Pago con tarjeta (simulación)</legend>
             <p>Usa exclusivamente la tarjeta de prueba 4242 4242 4242 4242. El número completo y el CVV nunca se envían ni se guardan.</p>

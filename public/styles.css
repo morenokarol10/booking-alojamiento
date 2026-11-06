@@ -699,6 +699,33 @@ input:focus-visible {
 .booking-form .full-width {
   grid-column: 1 / -1;
 }
+.booking-customer {
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #f8faf8;
+}
+.booking-customer h3 {
+  margin: 0 0 10px;
+  color: var(--ink);
+  font-size: 12px;
+}
+.booking-user-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.booking-customer input[readonly] {
+  background: #f0f3f0;
+  color: #59645c;
+  cursor: default;
+}
+.booking-customer > p {
+  margin: 9px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
 .booking-form input,
 .booking-form select {
   width: 100%;
@@ -955,6 +982,9 @@ input:focus-visible {
   }
 }
 @media (max-width: 680px) {
+  .booking-user-fields {
+    grid-template-columns: 1fr;
+  }
   .site-header {
     height: 66px;
     padding: 0 20px;

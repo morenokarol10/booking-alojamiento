@@ -10,6 +10,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { load } from 'js-yaml';
 import { AppModule } from './app.module';
+import { mergeOpenApiDocuments } from './openapi/merge-openapi-documents';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -51,6 +52,10 @@ async function bootstrap() {
     );
   }
   const projectContract = parsedProjectContract;
+  const combinedContract = mergeOpenApiDocuments(
+    integrationContract,
+    projectContract,
+  );
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle(projectContract.info.title)
@@ -70,7 +75,7 @@ async function bootstrap() {
     }
   }
   const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('api/docs', app, integrationContract, {
+  SwaggerModule.setup('api/docs', app, combinedContract, {
     swaggerOptions: {
       tryItOutEnabled: true,
       supportedSubmitMethods: [

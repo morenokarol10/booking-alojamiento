@@ -1,34 +1,41 @@
-# Booking Prototipo - Integración de Sistemas
+# Módulo de Alojamientos (Booking Prototipo)
 
-Prototipo de una plataforma de alojamientos tipo Booking, desarrollado como
-proyecto integrador. Incluye un Marketplace público, un Panel de Administración,
-una API REST en NestJS, persistencia PostgreSQL en Supabase, autenticación con
-Supabase Auth y un registro de eventos de dominio para preparar la integración
-EDA.
+Booking Prototipo es una aplicación de reservas de alojamientos desarrollada
+como proyecto integrador. Su propósito es permitir explorar alojamientos,
+gestionar cuentas y reservas, y administrar la operación desde una interfaz web.
 
-> **Estado de la evidencia de nube:** la configuración de Render y los enlaces
-> públicos objetivo se incluyen en este repositorio. Sin embargo, al revisar
-> `https://booking-alojamiento.onrender.com/marketplace/` y
-> `https://booking-alojamiento.onrender.com/api/docs-json` el **7 de octubre de
-> 2026**, ambos respondieron HTTP **503 Service Unavailable**. Por ello, este
-> documento no afirma que el servicio esté 100 % activo ni que la base de datos
-> de producción esté operativa en este momento. Se debe verificar el estado del
-> servicio y volver a probar las URLs antes de entregar una afirmación de
-> disponibilidad.
+La solución utiliza una arquitectura modular orientada a servicios: NestJS
+separa autenticación, alojamientos, reservas y administración; Supabase aporta
+PostgreSQL y Supabase Auth; y el Marketplace y el panel se sirven como recursos
+web estáticos. El enfoque **API-First** se refleja en DTOs validados, contratos
+OpenAPI y controladores REST. El registro de eventos de dominio prepara una
+integración EDA, pero el prototipo todavía no publica eventos en un broker.
+
+> **Alcance:** este README documenta el repositorio Booking Prototipo abierto,
+> no un microservicio Alojamientos independiente. La URL pública es un destino
+> configurado, no una prueba de disponibilidad.
+
+> **Estado del despliegue (4 de noviembre de 2026):** las solicitudes de
+> verificación a Render agotaron el tiempo de espera. En una revisión anterior,
+> el 7 de octubre de 2026, el Marketplace y Swagger respondieron
+> **503 Service Unavailable**. Por lo tanto, el despliegue público y la
+> conexión a Supabase de producción quedan **sin verificar**; revisa el estado
+> en Render y vuelve a probar los endpoints antes de presentarlos como activos.
 
 ## 1. Resumen Ejecutivo y Estado del Despliegue
 
-| Elemento                          | Implementación / estado                                                  |
-| :-------------------------------- | :----------------------------------------------------------------------- |
-| Aplicación                        | API NestJS y sitio estático HTML/CSS/JavaScript                          |
-| Plataforma prevista               | Render Web Service, ejecutado con Docker                                 |
-| Persistencia prevista             | Supabase PostgreSQL                                                      |
-| Autenticación                     | Supabase Auth, JWT Bearer y roles `cliente` / `admin`                    |
-| Marketplace                       | [`/marketplace/`](https://booking-alojamiento.onrender.com/marketplace/) |
-| Panel Admin                       | [`/admin/`](https://booking-alojamiento.onrender.com/admin/)             |
-| Swagger contrato GDS              | [`/api/docs`](https://booking-alojamiento.onrender.com/api/docs)         |
-| Swagger API del proyecto          | [`/api/project-docs`](https://booking-alojamiento.onrender.com/api/project-docs) |
-| Resultado de verificación externa | HTTP 503 en Marketplace y Swagger JSON al 2026-10-07                     |
+| Elemento | Implementación / estado |
+| :--- | :--- |
+| Backend | NestJS modular, API REST y validación de DTOs |
+| Interfaz | Marketplace, login/registro y panel estáticos servidos por NestJS |
+| Datos y autenticación | PostgreSQL en Supabase y Supabase Auth; operación en producción no verificada |
+| Plataforma configurada | Render Web Service basado en Docker, descrito en [render.yaml](./render.yaml) |
+| Marketplace público | [booking-alojamiento.onrender.com/marketplace/](https://booking-alojamiento.onrender.com/marketplace/) — no verificado |
+| Panel de administración | [booking-alojamiento.onrender.com/admin/](https://booking-alojamiento.onrender.com/admin/) — no verificado |
+| Swagger integrado | [booking-alojamiento.onrender.com/api/docs](https://booking-alojamiento.onrender.com/api/docs) |
+| Swagger de controladores NestJS | [booking-alojamiento.onrender.com/api/project-docs](https://booking-alojamiento.onrender.com/api/project-docs) |
+| Verificación más reciente | Timeout HTTP al 2026-11-04; resultado anterior 503 al 2026-10-07 |
+
 
 El repositorio contiene un [Dockerfile](./Dockerfile), un blueprint de Render
 en [render.yaml](./render.yaml), configuración de variables de entorno y
@@ -37,29 +44,29 @@ para despliegue, pero no prueba por sí sola que el servicio se encuentre
 actualmente saludable, que esté conectado a una instancia de Supabase o que
 los datos en producción estén disponibles.
 
-**Condición habilitante de despliegue: pendiente de verificación/recuperación.**
-Antes de marcarla como cumplida en una rúbrica, confirma en Render que el
-servicio esté `Live`, revisa sus logs y ejecuta una prueba HTTP exitosa de las
-tres URLs públicas. Comprueba además el acceso a Supabase desde la aplicación.
+**No declares cumplidos los criterios que requieren servicio operativo en nube**
+hasta confirmar el estado `Live` en Render, revisar los logs y probar HTTP,
+autenticación y lectura de Supabase con respuestas exitosas.
 
-## 2. Matriz de Cumplimiento de Criterios de Evaluación
+## 2. Matriz de cumplimiento de la rúbrica
 
-La matriz refleja el estado comprobable en el código y la verificación de nube
-realizada; no convierte una función implementada localmente en una afirmación
-de disponibilidad externa.
+La tabla distingue la implementación comprobable en el código de la
+verificación del servicio en producción. La presencia de un archivo de
+configuración o de una ruta implementada no demuestra por sí sola que el
+servicio remoto esté disponible.
 
-| Criterio de Evaluación                   |                  Estado                  | Evidencia Técnica / Ubicación                                                                                                                         |
-| :--------------------------------------- | :--------------------------------------: | :---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Despliegue en la nube                    |         **No verificable (503)**         | Blueprint y [Dockerfile](./Dockerfile); las URLs públicas consultadas devolvieron HTTP 503                                                            |
-| Panel de Administración funcional        | **Cumple en código; nube no verificada** | [public/admin/](./public/admin/), `GET /api/v1/admin/eventos`, CRUD protegido por guards `admin`                                                      |
-| Marketplace web funcional                | **Cumple en código; nube no verificada** | [public/](./public/), catálogo y filtros consumen `GET /api/v1/alojamientos`                                                                          |
-| APIs implementadas y documentadas        | **Cumple parcialmente**                  | Controladores NestJS, Swagger en `/api/docs` y contrato propio en `contracts/booking-ec-project.openapi.yaml`; el contrato GDS se conserva separado |
-| Base de datos operativa (3FN)            | **Parcial; no se acredita 3FN estricta** | [database/schema.sql](./database/schema.sql) define `alojamientos`, `reservas`, `eventos_log` y `favoritos`; no crea tabla `proveedores`, `servicios` ni `imagenes` |
-| Diseño API-First y contratos             |               **Parcial**                | Hay DTOs, validación y contrato oficial en [contracts/](./contracts/); los recursos y rutas locales no coinciden estrictamente con el contrato GDS    |
-| Endpoints para interoperabilidad         |     **Cumple en forma de respuesta**     | Mappers camelCase ↔ snake_case en `src/modules/*/entities/*mapper.ts`                                                                                 |
-| Arquitectura EDA / Orientada a Eventos   |         **Parcial / prototipo**          | `ReservaRealizadaEvent` se inserta en `eventos_log`; no existe broker, Outbox ni atomicidad reserva-evento                                            |
-| Documentación técnica                    |                **Cumple**                | Este README, esquemas ER, guía local y notas de despliegue                                                                                            |
-| Dominio del código y decisiones técnicas |  **Documentado; requiere sustentación**  | NestJS modular, Supabase Auth/RLS, roles, DTOs y mapeadores explicados en este documento                                                              |
+| # | Criterio | Estado basado en evidencia | Evidencia |
+| :---: | :--- | :--- | :--- |
+| 1 | Despliegue en la nube (Render) | **No verificable**: timeout el 2026-11-04; HTTP 503 histórico | [render.yaml](./render.yaml), [Dockerfile](./Dockerfile), [despliegue](#6-despliegue-en-render) |
+| 2 | Sistema de administración funcional | **Implementado en código**; operación pública no verificada | [public/admin/](./public/admin/), [controlador admin](./src/modules/admin/admin.controller.ts), rutas protegidas por `admin` |
+| 3 | Marketplace web funcional | **Implementado en código**; operación pública no verificada | [public/](./public/), catálogo, filtros, perfil y flujo de reserva |
+| 4 | APIs implementadas y documentadas con Swagger/OpenAPI | **Implementado en código**; una prueba de combinación OpenAPI falla actualmente | [controladores](./src/modules/), [OpenAPI del producto](./contracts/booking-ec-project.openapi.yaml), [OpenAPI GDS](./contracts/alojamientos-openapi.yaml) |
+| 5 | Base de datos en la nube (Supabase/PostgreSQL) | **Esquema y acceso implementados**; conexión de producción no verificada; 3FN estricta no acreditada | [database/schema.sql](./database/schema.sql), migraciones de [database/migrations/](./database/migrations/) |
+| 6 | Diseño API-First y preparación para integración | **Parcial**: DTOs, validación y mapeadores; la API local no implementa por completo el contrato GDS | [contratos](./contracts/), [módulos](./src/modules/) |
+| 7 | Contratos y endpoints para interoperabilidad | **Parcial**: contratos y rutas descritos; rutas/modelos GDS y locales son diferentes | [OpenAPI GDS](./contracts/alojamientos-openapi.yaml), [OpenAPI del producto](./contracts/booking-ec-project.openapi.yaml) |
+| 8 | Diseño preliminar EDA o registro de eventos | **Parcial**: se registra `ReservaRealizadaEvent`; no hay broker ni Outbox transaccional | [servicio de reservas](./src/modules/reservations/reservations.service.ts), `eventos_log` |
+| 9 | Documentación técnica mínima | **Cumple**: arquitectura, modelo, rutas, ejecución y despliegue están documentados | Este README, [schema SQL](./database/schema.sql), contratos OpenAPI |
+| 10 | Dominio del código por parte del estudiante | **Evidencia para sustentar**: decisiones y flujos están descritos; debe demostrarse en la defensa | Secciones de arquitectura, seguridad, datos y eventos de este README |
 
 ### Observaciones importantes para la evaluación
 
@@ -87,9 +94,24 @@ de disponibilidad externa.
 5. La API guarda la reserva y luego escribe el evento en otra operación REST.
    Si falla la escritura del evento, la reserva podría ya existir.
 
-## 3. Justificación Detallada por Criterio
+## 3. Rutas principales
 
-### 3.1 Despliegue y Accesibilidad Pública
+| Recurso | Ruta | Propósito |
+| :--- | :--- | :--- |
+| API raíz | `/` | Respuesta de bienvenida del backend; no es el Marketplace. |
+| Marketplace Web | `/marketplace/` | Catálogo y flujo de reserva. |
+| Inicio de sesión y registro | `/login/` | Autenticación y alta de clientes. |
+| Panel de Administración | `/admin/` | Gestión administrativa protegida por rol. |
+| Swagger/OpenAPI combinado | `/api/docs` | Documentación del contrato de integración y de la API del producto. |
+| Swagger de NestJS | `/api/project-docs` | Documentación generada desde controladores NestJS. |
+
+Las rutas web pueden estar servidas localmente y, al mismo tiempo, no ser
+accesibles desde el despliegue público. La disponibilidad de producción debe
+verificarse por separado.
+
+## 4. Evidencias técnicas y justificación por criterio
+
+### 4.1 Despliegue y Accesibilidad Pública
 
 Enlaces públicos objetivo:
 
@@ -117,7 +139,7 @@ este criterio:
 
 Render inyecta `PORT`; localmente la aplicación usa 3000 por defecto.
 
-### 3.2 Sistema de Administración
+### 4.2 Sistema de Administración
 
 El Panel permite consultar alojamientos, crear, editar y eliminar registros,
 consultar reservas y visualizar eventos. Sus recursos de interfaz están en
@@ -252,7 +274,7 @@ arreglos de strings: además de los arreglos nativos, acepta valores serializado
 como JSON (`["WiFi"]`) y responde con error explícito si el dato no se puede
 validar.
 
-### 3.3 Marketplace Web
+### 4.3 Marketplace Web
 
 La interfaz estática se sirve desde [public/](./public/) bajo
 `/marketplace/`. Permite:
@@ -300,20 +322,23 @@ API ni se almacena. La API solo recibe `confirmacionPagoSimulado: true`, marca
 la reserva como cancelada en Supabase y registra un evento de devolución
 simulada. No se procesa dinero ni se realiza una devolución financiera real.
 
-### 3.4 APIs y Documentación Swagger/OpenAPI
+### 4.4 APIs y Documentación Swagger/OpenAPI
 
-`/api/docs` carga íntegramente el contrato GDS
-`contracts/alojamientos-openapi.yaml` en Swagger UI, incluyendo sus rutas,
-métodos, esquemas, seguridad y etiquetas. Las operaciones tienen habilitado
-**Try it out**. La API REST propia del prototipo, generada desde sus
-controladores NestJS y DTOs, se consulta por separado en `/api/project-docs`.
-El contrato GDS se conserva sin cambios; el contrato propio del proyecto se
-mantiene en `contracts/booking-ec-project.openapi.yaml`.
+`/api/docs` combina en Swagger UI los contratos
+`contracts/alojamientos-openapi.yaml` (GDS) y
+`contracts/booking-ec-project.openapi.yaml` (API operativa), sin modificar el
+contrato de integración. Conserva las rutas y etiquetas GDS e incorpora las
+rutas locales con el prefijo `/api/v1`, incluidas alojamientos, reservas,
+favoritos, autenticación y administración. Las operaciones tienen habilitado
+**Try it out** y cada grupo conserva su servidor: los paths GDS usan los hosts
+GDS/Sandbox declarados en su contrato, mientras que los paths locales apuntan
+a la raíz de Render o `localhost:3000`. La documentación generada directamente
+de los controladores NestJS permanece disponible en `/api/project-docs`.
 
-Las operaciones GDS de `/api/docs` se envían a los servidores declarados en el
-YAML (`api.booking-hub.com` y `sandbox.api.booking-hub.com`). Esos paths no son
-implementaciones locales de este prototipo; para probar las rutas reales de
-Booking EC, utiliza `/api/project-docs`. Los métodos protegidos indican el
+Los paths GDS de `/api/docs` se envían a los servidores declarados en el
+contrato; son operaciones de integración, no implementaciones locales. Las
+rutas locales `/api/v1/...` se pueden probar desde `/api/docs` o
+`/api/project-docs`. Los métodos protegidos indican el
 esquema Bearer `supabase-jwt`.
 
 #### Endpoints del prototipo
@@ -353,7 +378,7 @@ para las rutas del producto se mantiene en
 El contrato de integración no debe editarse para documentar funcionalidades
 locales; las rutas propias se agregan únicamente al contrato del proyecto.
 
-### 3.5 Base de Datos Supabase y Normalización
+### 4.5 Base de Datos Supabase y Normalización
 
 El esquema nuevo está en [database/schema.sql](./database/schema.sql). Para
 una base que ya tenía la estructura anterior se proporcionan
@@ -364,6 +389,9 @@ y
 [20261009_rename_alojamientos_imagenes.sql](./database/migrations/20261009_rename_alojamientos_imagenes.sql)
 y
 [20261010_render_schema_cache.sql](./database/migrations/20261010_render_schema_cache.sql).
+[20261011_booking_admin_schema.sql](./database/migrations/20261011_booking_admin_schema.sql)
+repara la columna `reservas.cliente_id` y actualiza el schema cache para que
+funcionen las reservas de cuentas autenticadas.
 La migración
 [202612100001_create_favoritos.sql](./database/migrations/202612100001_create_favoritos.sql)
 crea el almacenamiento de favoritos por usuario autenticado; ejecútala también
@@ -371,9 +399,10 @@ en Supabase antes de habilitar esa función en el despliegue.
 Los scripts deben ejecutarse en Supabase con una cuenta autorizada.
 En Render, el despliegue del backend no ejecuta migraciones de Supabase. Para
 actualizar una base remota existente, ejecuta la migración
-`20261010_render_schema_cache.sql` en el SQL Editor de Supabase; asegura la
-columna `servicios`, adapta imágenes/coordenadas al esquema actual y recarga el
-schema cache de PostgREST. Luego carga los alojamientos de demostración con
+`20261010_render_schema_cache.sql` y
+`20261011_booking_admin_schema.sql` en el SQL Editor de Supabase; aseguran las
+columnas actuales de alojamientos y reservas y recargan el schema cache de
+PostgREST. Luego carga los alojamientos de demostración con
 `npm run seed:alojamientos` desde un entorno que tenga
 `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY`. El Marketplace mostrará esos
 registros al consultar `GET /api/v1/alojamientos`. No se siembran datos
@@ -448,7 +477,7 @@ servidor usa la clave service-role para acceder a datos solo después de
 autorizar la petición con NestJS y filtra favoritos por el ID validado del JWT.
 La clave service-role elude RLS y nunca debe enviarse al navegador.
 
-### 3.6 Diseño API-First e Interoperabilidad
+### 4.6 Diseño API-First e Interoperabilidad
 
 Los controladores y DTOs dan forma explícita a los cuerpos HTTP y aplican
 validación con `class-validator`, `class-transformer` y `ValidationPipe`.
@@ -469,7 +498,7 @@ campos como `proveedorId`, `nombre`, `coordenadas`, `precioBaseNoche`,
 camelCase de las respuestas sí está implementada; no implica conformidad con
 los paths o esquemas del YAML oficial que son distintos.
 
-### 3.7 Arquitectura SOA/EDA y Eventos
+### 4.7 Arquitectura SOA/EDA y Eventos
 
 Al crear una reserva, el servicio calcula el precio, inserta la reserva con
 estado de pago simulado `exitoso` y estado `confirmada`, y después inserta un
@@ -489,7 +518,7 @@ reserva puede persistir sin evento. Para robustecerlo en una siguiente fase:
 4. Crear consumidores desacoplados de notificaciones, facturación y analítica,
    con dead-letter queue y métricas.
 
-### 3.8 Estructura del Proyecto y Decisiones Arquitecturales
+### 4.8 Estructura del Proyecto y Decisiones Arquitecturales
 
 ```text
 .
@@ -533,14 +562,43 @@ Decisiones:
   en el mismo origen, evitando una capa adicional de hosting frontend en el
   prototipo.
 
-## 4. Instalación y Ejecución Local
+### 4.9 Guía de sustentación (criterio 10)
+
+Para demostrar dominio del código durante la defensa, recorre un flujo
+completo y justifica las decisiones que lo implementan:
+
+1. Explica cómo un módulo NestJS conecta controlador, DTO, servicio y cliente
+   Supabase; usa alojamientos o reservas como ejemplo.
+2. Sigue una reserva desde el formulario hasta `POST /api/v1/reservas` y
+   describe cómo el guard valida el JWT, el servidor obtiene la identidad del
+   cliente y la base de datos registra la reserva.
+3. Muestra cómo los guards de autenticación y rol restringen las operaciones
+   administrativas, y cómo Supabase RLS complementa los controles del backend.
+4. Describe las tablas, las claves foráneas, las políticas RLS y las decisiones
+   que impiden afirmar que el esquema actual cumple 3FN estricta.
+5. Distingue el contrato GDS de integración del OpenAPI de la API local; explica
+   también que `ReservaRealizadaEvent` se guarda en una tabla y aún no se
+   entrega mediante un broker ni una Outbox atómica.
+6. Ejecuta las pruebas disponibles y presenta sus resultados reales:
+   `npm test -- --runInBand`, `npm run build` y `npm run lint`. No describas una
+   limitación documentada como si ya estuviera resuelta.
+
+## 5. Instalación y ejecución local
 
 ### Requisitos
 
 - Node.js 22 o compatible con el comando `node --env-file-if-exists`.
 - npm.
+- Git para clonar el repositorio.
 - Proyecto Supabase con Auth y PostgreSQL habilitados.
 - Docker es necesario solo para construir/ejecutar la imagen.
+
+Clona el repositorio y entra al directorio del proyecto:
+
+```powershell
+git clone https://github.com/morenokarol10/booking-alojamiento.git
+Set-Location booking-alojamiento
+```
 
 ### Variables de entorno
 
@@ -565,8 +623,9 @@ No agregues `.env` al repositorio. `SUPABASE_KEY` es para los flujos de Auth;
    `database/migrations/20261007_contract_alignment.sql`,
    `database/migrations/20261008_auth_and_rls.sql`,
    `database/migrations/20261009_rename_alojamientos_imagenes.sql` y
-   `database/migrations/20261010_render_schema_cache.sql`, en ese orden; luego
-   ejecuta `database/migrations/202612100001_create_favoritos.sql`.
+   `database/migrations/20261010_render_schema_cache.sql` y
+   `database/migrations/20261011_booking_admin_schema.sql`, en ese orden;
+   luego ejecuta `database/migrations/202612100001_create_favoritos.sql`.
 3. Instala y compila:
 
    ```powershell
@@ -580,7 +639,14 @@ No agregues `.env` al repositorio. `SUPABASE_KEY` es para los flujos de Auth;
    npm run start:dev
    ```
 
-5. Si necesitas el usuario de demostración, configura `ADMIN_SEED_PASSWORD`
+5. Para ejecutar la compilación como producción en local:
+
+   ```powershell
+   npm run build
+   npm run start:prod
+   ```
+
+6. Si necesitas el usuario de demostración, configura `ADMIN_SEED_PASSWORD`
    localmente y ejecuta `npm run seed:admin`.
 
 Rutas locales con `PORT=3000`:
@@ -598,7 +664,7 @@ npm run build
 npm run lint
 ```
 
-## 5. Despliegue en Render
+## 6. Despliegue en Render
 
 El Blueprint propone un Web Service Docker y requiere definir secretos en
 **Dashboard → Environment**:
@@ -630,7 +696,7 @@ login, `/api/v1/auth/me`, lectura del catálogo y acceso denegado para una
 cuenta cliente. Registra la fecha y el resultado real de esas pruebas antes de
 afirmar que el despliegue está operativo.
 
-## 6. Alcance, Limitaciones y Próximos Pasos
+## 7. Alcance, limitaciones y próximos pasos
 
 - Recuperar/verificar el servicio Render y probar la conexión a Supabase en la
   URL pública.

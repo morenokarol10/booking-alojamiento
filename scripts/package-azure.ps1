@@ -71,7 +71,7 @@ try {
 
   $archive = [System.IO.Compression.ZipFile]::OpenRead($archivePath)
   $entryNames = @($archive.Entries | ForEach-Object { $_.FullName })
-  foreach ($requiredEntry in @('package.json', 'dist/main.js', 'contracts/alojamientos-openapi.yaml', 'database/migrations/202611080001_alojamientos_v2_core.sql', 'public/index.html', 'node_modules/@nestjs/core/package.json')) {
+  foreach ($requiredEntry in @('package.json', 'dist/main.js', 'contracts/alojamientos-openapi-v2.yaml', 'database/migrations/202611080001_alojamientos_v2_core.sql', 'public/index.html', 'node_modules/@nestjs/core/package.json')) {
     if ($entryNames -notcontains $requiredEntry) {
       throw "Azure package is missing required root entry '$requiredEntry'."
     }

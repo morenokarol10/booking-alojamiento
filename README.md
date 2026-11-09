@@ -50,6 +50,64 @@ los datos en producción estén disponibles.
 hasta confirmar el estado `Live`, revisar los logs y probar HTTP, autenticación
 y lectura de Supabase con respuestas exitosas.
 
+### Arquitectura objetivo RDA2 (diseño, no despliegue actual)
+
+La vertical puede separarse en `ms_catalog`, `ms_rooms`, `ms_inventory`,
+`ms_orders`, `ms_reception`, `ms_pricing` y `ms_housekeeping`, cada uno con su
+propia base PostgreSQL. `ms_catalog` posee las fichas y `alojamientoId` público;
+`ms_rooms` posee tipos y unidades; `ms_inventory` calcula cupos y retenciones;
+`ms_pricing` es dueño de tarifas, impuestos y cotizaciones; `ms_orders` recibe
+compras Saga y es dueño de la idempotencia; `ms_reception` registra entradas y
+salidas; `ms_housekeeping` programa limpieza, desinfección y liberación de
+unidades. El script de referencia
+[alojamientos-master-schema.sql](./database/architecture/alojamientos-master-schema.sql)
+crea esas bases de forma independiente; `hotel_id`, `room_type_id` y `order_id`
+son UUID lógicos entre servicios, sin claves foráneas ni transacciones
+distribuidas. La implementación actual de este repositorio sigue siendo el
+módulo NestJS descrito arriba: el script no se ha aplicado y no implica que los
+siete microservicios estén desplegados.
+
+El contrato gRPC compartido está en
+[inventory.proto](./contracts/inventory.proto). `ms_inventory` es el cliente
+emisor; Booking es el servidor de ingesta. Para la vía absoluta,
+`PushStockUpdate` publica una instantánea por noche: `service_id=alojamientos`,
+`item_id=<alojamientoId>:<tipoHabitacionCodigo>`, `date=YYYY-MM-DD`,
+`time_slot=14:00`, `slot_id=slot-YYYYMMDD-1400`,
+`available_units=max(0,total-bloqueadas-reservadas)` y `timestamp` Unix epoch
+en **milisegundos**. Se persiste en Outbox antes de enviar; `StockUpdateAck`
+determina éxito, registro obsoleto o error, y sus `current_available`,
+`error_code` y `processed_at` alimentan la conciliación. `GetSlotAvailability`
+consulta esa misma clave de slot. La vía opcional
+`StreamInventoryChanges` envía deltas con `event_id` UUID v4 para deduplicar;
+no se debe emitir el mismo cambio por ambas vías, pues una es snapshot absoluto
+y la otra delta.
+
+El contrato REST canónico recibe la compra en
+`POST /api/v2/alojamientos/orders/create`, con `Idempotency-Key` UUID v4.
+`ms_orders` verifica clave/huella, coordina retención en inventario y precio
+con la Saga, persiste el resultado y responde en ≤ 3000 ms. El reintento con
+la misma clave y cuerpo devuelve la respuesta original; misma clave con otro
+cuerpo se rechaza. Cancelaciones usan también una clave nueva obligatoria y
+liberan stock como acción compensatoria.
+
+Las fechas de estancia se interpretan en `America/Guayaquil`: check-in desde
+14:00 y check-out hasta 11:00. `ms_housekeeping` aplica el buffer configurable
+de limpieza/desinfección al período no vendible de una unidad; no se inventa
+una duración por defecto. El contrato exige Money serializado como string
+decimal exacto (`"560.00"`), cédula ecuatoriana de 10 dígitos validada con
+módulo 10, RUC de 13 dígitos, pasaporte alfanumérico de 6–12 caracteres e
+impuestos IVA 15 % más USD 2.00 por habitación y noche. El esquema maestro
+almacena dinero en `NUMERIC(11,2)` y deja la serialización exacta en la frontera
+REST.
+
+**Desajuste que requiere confirmación del equipo de Booking:** el
+[OpenAPI v2.2.0](./contracts/alojamientos-openapi-v2.yaml) indica host gRPC
+`rda1-backend-integracion-sistemas.onrender.com:50051`; los comentarios de
+`inventory.proto` indican `booking.epn.edu.ec:50051` como host oficial y
+describen el contrato como Vertical Atracciones. El líder técnico debe
+confirmar host/SNI y acordar el uso hotelero de `item_id`, `time_slot` y
+`slot_id` antes de configurar la conexión de producción.
+
 ### Preparación de despliegue en Azure App Service
 
 La aplicación escucha en `process.env.PORT` o en `8080`, enlazada a
@@ -132,10 +190,10 @@ servicio remoto esté disponible.
 | 1 | Despliegue en la nube (Render) | **No verificable**: timeout el 2026-11-04; HTTP 503 histórico | [render.yaml](./render.yaml), [Dockerfile](./Dockerfile), [despliegue](#6-despliegue-en-render) |
 | 2 | Sistema de administración funcional | **Implementado en código**; operación pública no verificada | [public/admin/](./public/admin/), [controlador admin](./src/modules/admin/admin.controller.ts), rutas protegidas por `admin` |
 | 3 | Marketplace web funcional | **Implementado en código**; operación pública no verificada | [public/](./public/), catálogo, filtros, perfil y flujo de reserva |
-| 4 | APIs implementadas y documentadas con Swagger/OpenAPI | **Rutas Alojamientos v2 prioritarias implementadas en código**; operación pública no verificada | [módulo de integración](./src/modules/integration/), [OpenAPI GDS](./contracts/alojamientos-openapi.yaml) |
+| 4 | APIs implementadas y documentadas con Swagger/OpenAPI | **Rutas Alojamientos v2 prioritarias implementadas en código**; operación pública no verificada | [módulo de integración](./src/modules/integration/), [OpenAPI GDS](./contracts/alojamientos-openapi-v2.yaml) |
 | 5 | Base de datos en la nube (Supabase/PostgreSQL) | **Esquema y acceso implementados**; conexión de producción no verificada; 3FN estricta no acreditada | [database/schema.sql](./database/schema.sql), migraciones de [database/migrations/](./database/migrations/) |
-| 6 | Diseño API-First y preparación para integración | **Implementado para los flujos prioritarios v2**; el usuario reporta la migración aplicada, pendiente verificar el esquema y conectividad | [contrato](./contracts/alojamientos-openapi.yaml), [módulos de integración](./src/modules/integration/) |
-| 7 | Contratos y endpoints para interoperabilidad | **Implementados en código**: salud, catálogo, búsqueda, cotización, órdenes idempotentes, eventos y snapshot de inventario; operación externa no verificada | [controladores v2](./src/modules/integration/), [OpenAPI GDS](./contracts/alojamientos-openapi.yaml) |
+| 6 | Diseño API-First y preparación para integración | **Implementado para los flujos prioritarios v2**; el usuario reporta la migración aplicada, pendiente verificar el esquema y conectividad | [contrato](./contracts/alojamientos-openapi-v2.yaml), [módulos de integración](./src/modules/integration/) |
+| 7 | Contratos y endpoints para interoperabilidad | **Implementados en código**: salud, catálogo, búsqueda, cotización, órdenes idempotentes, eventos y snapshot de inventario; operación externa no verificada | [controladores v2](./src/modules/integration/), [OpenAPI GDS](./contracts/alojamientos-openapi-v2.yaml) |
 | 8 | Diseño preliminar EDA o registro de eventos | **Outbox transaccional y publicación confirmada de stock a RabbitMQ implementados en código**; CloudAMQP y cola consumidora de Booking aún deben configurarse y probarse | [migración v2](./database/migrations/202611080001_alojamientos_v2_core.sql), [servicio RabbitMQ](./src/modules/integration/integration-stock-sync.service.ts) |
 | 9 | Documentación técnica mínima | **Cumple**: arquitectura, modelo, rutas, ejecución y despliegue están documentados | Este README, [schema SQL](./database/schema.sql), contratos OpenAPI |
 | 10 | Dominio del código por parte del estudiante | **Evidencia para sustentar**: decisiones y flujos están descritos; debe demostrarse en la defensa | Secciones de arquitectura, seguridad, datos y eventos de este README |
@@ -143,7 +201,7 @@ servicio remoto esté disponible.
 ### Observaciones importantes para la evaluación
 
 1. El contrato de integración
-   [alojamientos-openapi.yaml](./contracts/alojamientos-openapi.yaml) describe
+   [alojamientos-openapi-v2.yaml](./contracts/alojamientos-openapi-v2.yaml) describe
    **API de Alojamientos v2.2.0**. Las rutas implementadas en NestJS usan el
    prefijo `/api/v2/alojamientos`; incluyen salud, catálogo, búsqueda,
    cotización, creación/cancelación idempotentes, feed de eventos y snapshot
@@ -184,8 +242,11 @@ servicio remoto esté disponible.
 | Panel de Administración | `/admin/` | Gestión administrativa protegida por rol. |
 | Salud de integración Alojamientos v2 | `GET /api/v2/alojamientos/health` | Semáforo y comprobación de Supabase con timeout acotado. |
 | Catálogo y búsqueda v2 | `GET /api/v2/alojamientos`, `POST /api/v2/alojamientos/search` | Catálogo, filtros y precio total por estancia. |
+| Ficha y disponibilidad v2 | `GET /api/v2/alojamientos/{id}`, `/habitaciones`, `/availability` | Usa el `HTL-...` exacto del catálogo y devuelve tipos disponibles. |
+| Sincronización de huéspedes v2 | `GET/POST /api/v2/clientes` | Protegido por credenciales de integración; el POST crea o actualiza por correo. |
 | Cotización v2 | `POST /api/v2/alojamientos/availability` | Precio congelado durante 30 minutos, sin retener inventario. |
 | Saga de reservas v2 | `POST /api/v2/alojamientos/orders/create`, `POST /api/v2/alojamientos/orders/{orderId}/cancel` | Creación y compensación idempotentes con sincronización de inventario. |
+| Check-in presencial | `POST /api/v1/reservas/{external_order_id}/checkin` | Desde el panel, el backend envía el huésped real a Booking Core; la API key no se expone al navegador. |
 | Interoperabilidad de stock | RabbitMQ/CloudAMQP, exchange `booking.events`, routing key `stock.updated` | Outbox transaccional con mensajes persistentes, publisher confirms y reintentos. |
 | Recuperación e inventario | `GET /api/v2/alojamientos/eventos`, `GET /api/v2/alojamientos/{id}/inventario` | Feed CloudEvents y snapshot con hash para reconciliación. |
 | Swagger/OpenAPI combinado | `/api/docs` | Documentación del contrato de integración y de la API del producto. |
@@ -411,7 +472,7 @@ simulada. No se procesa dinero ni se realiza una devolución financiera real.
 ### 4.4 APIs y Documentación Swagger/OpenAPI
 
 `/api/docs` combina en Swagger UI los contratos
-`contracts/alojamientos-openapi.yaml` (GDS) y
+`contracts/alojamientos-openapi-v2.yaml` (GDS) y
 `contracts/booking-ec-project.openapi.yaml` (API operativa), sin modificar el
 contrato de integración. Conserva las rutas y etiquetas GDS e incorpora las
 rutas locales con el prefijo `/api/v1`, incluidas alojamientos, reservas,
@@ -455,7 +516,7 @@ esquema Bearer `supabase-jwt`.
 #### Contrato de la materia frente a la API implementada
 
 Se preserva sin modificaciones el archivo
-[contracts/alojamientos-openapi.yaml](./contracts/alojamientos-openapi.yaml).
+[contracts/alojamientos-openapi-v2.yaml](./contracts/alojamientos-openapi-v2.yaml).
 Este contrato externo define el dominio GDS, con operaciones como búsqueda,
 disponibilidad y órdenes; no contiene las rutas locales ni los modelos de
 alojamiento/reserva usados por esta aplicación. La especificación independiente
@@ -605,7 +666,7 @@ usa esta Outbox.
 ```text
 .
 ├── contracts/
-│   ├── alojamientos-openapi.yaml          # contrato de integración, sin cambios
+│   ├── alojamientos-openapi-v2.yaml       # contrato específico de integración
 │   └── booking-ec-project.openapi.yaml    # contrato de la API del producto
 ├── database/
 │   ├── schema.sql                 # esquema inicial, políticas y semillas
@@ -708,7 +769,10 @@ INVENTORY_SERVICE_ID=NODE_ALO_SIGLAS
 No agregues `.env` al repositorio. `SUPABASE_KEY` es para los flujos de Auth;
 `SUPABASE_SERVICE_ROLE_KEY` solo se usa por el servidor y script de seeding.
 No compartas ni envíes credenciales por chat; en Azure se configuran directamente
-en Application Settings.
+en Application Settings. `API_KEY` autentica la integración entrante y el
+backend la envía como `X-API-Key` en el check-in saliente a Booking Core.
+`BOOKING_CORE_API_URL` puede reemplazar el host remoto; por defecto es
+`https://booking-core-api.azurewebsites.net`.
 
 ### Preparar base y arrancar
 
@@ -724,8 +788,10 @@ en Application Settings.
    `20261013_atomic_booking_availability.sql`,
    `20261028_integration_contract_v2.sql`,
    `202611080001_alojamientos_v2_core.sql` y
-   `202612100001_create_favoritos.sql`. No vuelvas a ejecutar una migración que
-   ya esté aplicada.
+   `202612100001_create_favoritos.sql`. Para habilitar la sincronización de
+   huéspedes y guardar el resultado del check-in, aplica también
+   `202612110001_booking_guest_sync_checkin.sql`. No vuelvas a ejecutar una
+   migración que ya esté aplicada.
 3. La migración v2 requiere la estructura base de `alojamientos` y `reservas`.
    Para el proyecto Supabase que se usará con Azure, el usuario confirmó que
    `202611080001_alojamientos_v2_core.sql` ya se ejecutó. Antes de integrar,

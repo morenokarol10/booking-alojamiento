@@ -5,19 +5,17 @@ info:
   contact:
     name: Líder de Integración de Alojamientos (MS_ALO)
     email: jlcadenac@puce.edu.ec
-  x-inventory-rabbitmq:
-    provider: CloudAMQP
-    exchange: booking.events
-    exchangeType: topic
-    routingKey: stock.updated
-    connectionVariable: RABBITMQ_URL
-    delivery: persistent
-    publisherConfirms: true
+  x-inventory-grpc:
+    service: inventory.InventoryStockService
+    port: 50051
+    host: rda1-backend-integracion-sistemas.onrender.com
+    note: Host de INGESTA de Booking (el consumidor). Es el mismo para todos los socios. Confirmar el host definitivo con
+      el líder técnico antes de la defensa.
   description: |
     # Contrato de Integración — Vertical de Alojamientos (RDA2) · v2.2.0
 
     **Proveedor:** nodo de Alojamientos (`MS_ALO`). **Consumidor:** ESB / Booking Prototipo.
-    **Estándares:** OpenAPI 3.0.3 · RFC 7807 (Problem Details) · RFC 3339 (fechas) · CloudEvents 1.0 · RabbitMQ AMQP (stock).
+    **Estándares:** OpenAPI 3.0.3 · RFC 7807 (Problem Details) · RFC 3339 (fechas) · CloudEvents 1.0 · gRPC/Protobuf v3 (solo stock).
 
     > **Principio de lectura tolerante.** Los *clientes* DEBEN ignorar campos desconocidos en las respuestas
     > (se pueden agregar campos sin cambiar la versión mayor). Los *servidores* DEBEN rechazar con `400`
@@ -131,26 +129,31 @@ info:
 
     Las restricciones y tarifas por noche se leen en `GET /alojamientos/{id}/inventario` (`tarifas[]`). Las validaciones se aplican tanto en `POST /availability` como en `orders/create`.
 
-    ## 5. Sincronización de stock — RabbitMQ / CloudAMQP
+    ## 5. Sincronización de stock — gRPC (no REST)
 
-    Las compras viajan por REST; **las actualizaciones de stock se publican en RabbitMQ** por el exchange durable tipo `topic` `booking.events`, con routing key `stock.updated`. La conexión segura se configura mediante `RABBITMQ_URL` (`amqps://`).
+    Las compras viajan por REST; **el stock viaja por gRPC** (HTTP/2, puerto **50051**) hacia el host de ingesta de Booking (`info.x-inventory-grpc`).
 
     * `item_id` = `<alojamientoId>:<tipoHabitacionCodigo>` (ej. `HTL-QUITO-001:SUITE_DELUXE`).
     * **Una actualización por noche de estancia.** Una reserva de 4 noches emite **4** mensajes (`date` = cada noche, `check-in … check-out − 1`).
-    * El mensaje lleva disponibilidad **absoluta** (`available_units`), no un delta, para que reintentar no reste/sume unidades dos veces.
+    * `PushStockUpdate` envía `available_units` **absoluto**; `StreamInventoryChanges` envía `delta` (+1/−1) con `event_id` único (idempotente).
     * Se emite al **reservar, cancelar, bloquear** una habitación y al cargar inventario.
-    * Los mensajes son persistentes, se publican con publisher confirms y `mandatory`; Booking debe enlazar una cola durable al exchange/routing key y deduplicar por `messageId`.
-    * **Reconciliación:** Booking puede consultar `GET /alojamientos/{id}/inventario?desde=&hasta=` para comparar el inventario fuente de verdad y corregir divergencias.
+    * **Reconciliación:** si Booking detecta un `last_sync_hash` distinto, consulta `GET /alojamientos/{id}/inventario?desde=&hasta=` (fuente de verdad) y corrige.
 
-    ```json
-    {
-      "service_id": "NODE_ALO_SIGLAS",
-      "item_id": "HTL-QUITO-001:SUITE_DELUXE",
-      "available_units": 3,
-      "date": "2026-11-02",
-      "reason": "ORDER_CREATED"
+    ```protobuf
+    syntax = "proto3";
+    package inventory;
+    service InventoryStockService {
+      rpc PushStockUpdate (StockUpdateMessage) returns (StockUpdateAck);
+      rpc StreamInventoryChanges (stream StockChangeEvent) returns (StreamSummary);
     }
+    message StockUpdateMessage { string service_id = 1; string item_id = 2; string date = 3;
+      string time_slot = 4; int32 available_units = 5; int64 timestamp = 6; }
+    message StockUpdateAck { bool success = 1; string message = 2; int64 processed_at = 3; }
+    message StockChangeEvent { string event_id = 1; string service_id = 2; string item_id = 3;
+      string date = 4; string time_slot = 5; int32 delta = 6; int64 timestamp = 7; }
+    message StreamSummary { int32 total_events_processed = 1; bool is_synchronized = 2; string last_sync_hash = 3; }
     ```
+    Para alojamientos `service_id = "alojamientos"` (o el código del nodo) y `time_slot = "14:00"`.
 
     ## 6. Promociones y combos (Cátedra RDA2 §9)
 
@@ -180,7 +183,7 @@ info:
     ### 7.1 Protección de datos personales (LOPDP, Ecuador)
 
     * Los campos con `x-pii: true` son datos personales; `x-secret: true` marca credenciales (la clave digital de la habitación).
-    * **Minimización:** los eventos del feed outbox y de stock RabbitMQ **no contienen PII**; el publicador envía solo identificador de nodo, artículo, cantidad disponible, fecha y motivo.
+    * **Minimización:** los eventos del feed outbox y el stream gRPC **no contienen PII** (solo identificadores de reserva y cifras de inventario). Verificado por prueba automática.
     * **Logs y trazas:** no registrar campos `x-pii` ni `x-secret`; `X-Correlation-ID` nunca debe contener datos personales.
     * **Transporte:** solo TLS ≥ 1.2. **Retención:** datos del huésped mientras dure la obligación fiscal/contractual; luego anonimizar.
     * El acceso a PII de otra persona exige el rol/scope correspondiente y queda auditado con el `X-Correlation-ID`.
@@ -231,7 +234,81 @@ tags:
   description: Acuerdo comercial de promociones (Cátedra RDA2 §9).
 - name: Alojamientos - Telemetría y Salud de Nodo v2
   description: Health (semáforo), feed Outbox y trazabilidad.
+- name: Alojamientos - Sincronización de Huéspedes v2
+  description: Sincronización segura de perfiles de huéspedes desde Booking.
 paths:
+  /clientes:
+    get:
+      operationId: listSynchronizedCustomers
+      tags:
+      - Alojamientos - Sincronización de Huéspedes v2
+      summary: Consultar los huéspedes sincronizados
+      security:
+      - OAuth2ClientCredentials:
+        - alojamientos:read
+      - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Huéspedes sincronizados.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - message
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/IntegrationCustomerV2'
+                  message:
+                    type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized401'
+        '500':
+          $ref: '#/components/responses/InternalError500'
+    post:
+      operationId: synchronizeCustomer
+      tags:
+      - Alojamientos - Sincronización de Huéspedes v2
+      summary: Crear o actualizar un huésped por correo electrónico
+      description: El correo se normaliza a minúsculas y sirve como clave de sincronización.
+      security:
+      - OAuth2ClientCredentials:
+        - alojamientos:book
+      - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IntegrationCustomerRequestV2'
+      responses:
+        '200':
+          description: Huésped creado o actualizado.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - message
+                properties:
+                  data:
+                    $ref: '#/components/schemas/IntegrationCustomerV2'
+                  message:
+                    type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized401'
+        '422':
+          description: Documento ecuatoriano o datos del huésped no válidos.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '500':
+          $ref: '#/components/responses/InternalError500'
   /alojamientos/health:
     get:
       operationId: getHealth
@@ -823,7 +900,7 @@ paths:
       summary: Cancelar reserva (acción compensatoria de Saga)
       description: |
         **Idempotente** y seguro de reintentar: cancelar una reserva ya `CANCELLED` devuelve `200` con `yaCancelada: true`
-        y el **mismo** `codigoReembolso`. Libera la habitación, publica la actualización de stock por RabbitMQ y emite `alojamiento.reserva.cancelada`.
+        y el **mismo** `codigoReembolso`. Libera la habitación y emite `stock` (gRPC) + evento `alojamiento.reserva.cancelada`.
 
         * `solicitadoPor = SAGA_ORCHESTRATOR` → reembolso **100 %** siempre.
         * `solicitadoPor = CLIENTE` → según `politicaCancelacion` (fuera de ventana se aplica `penalidad`).
@@ -986,7 +1063,7 @@ paths:
       summary: Check-out, liquidación de consumos y liberación de habitación
       description: |
         Requiere estado `CHECKED_IN`. Liquida consumos de minibar/servicios, revoca la clave digital y pasa la habitación a limpieza.
-        Emite `alojamiento.checkout.completado` y publica la actualización de stock por RabbitMQ.
+        Emite `alojamiento.checkout.completado` y actualiza stock por gRPC.
       parameters:
       - $ref: '#/components/parameters/OrderRefPath'
       - $ref: '#/components/parameters/CorrelationIdHeader'
@@ -1209,10 +1286,10 @@ paths:
       operationId: getInventorySnapshot
       tags:
       - Alojamientos - Disponibilidad y Cotización v2
-      summary: Inventario por noche (fuente de verdad para reconciliar el stock RabbitMQ)
+      summary: Inventario por noche (fuente de verdad para reconciliar el stock gRPC)
       description: |
         Devuelve, por noche y tipo de habitación, `habitacionesTotales`, `reservadas`, `bloqueadas` y `disponibles`.
-        Lo usa Booking para reconciliar el inventario cuando detecta una diferencia con los eventos recibidos. Rol `SERVICE`/`ADMIN`. Rango máximo: 92 noches.
+        Lo usa Booking cuando el `last_sync_hash` del stream gRPC no coincide. Rol `SERVICE`/`ADMIN`. Rango máximo: 92 noches.
       security:
       - OAuth2ClientCredentials:
         - alojamientos:inventory
@@ -1873,7 +1950,7 @@ paths:
       summary: '[DEPRECADO] Cancelar reserva (acción compensatoria de Saga)'
       description: |
         **Alias deprecado** de `POST /alojamientos/orders/{orderId}/cancel` (comportamiento idéntico; se elimina en v3). **Idempotente** y seguro de reintentar: cancelar una reserva ya `CANCELLED` devuelve `200` con `yaCancelada: true`
-        y el **mismo** `codigoReembolso`. Libera la habitación, publica la actualización de stock por RabbitMQ y emite `alojamiento.reserva.cancelada`.
+        y el **mismo** `codigoReembolso`. Libera la habitación y emite `stock` (gRPC) + evento `alojamiento.reserva.cancelada`.
 
         * `solicitadoPor = SAGA_ORCHESTRATOR` → reembolso **100 %** siempre.
         * `solicitadoPor = CLIENTE` → según `politicaCancelacion` (fuera de ventana se aplica `penalidad`).
@@ -1941,7 +2018,7 @@ paths:
       summary: '[DEPRECADO] Cancelar reserva (acción compensatoria de Saga)'
       description: |
         **Alias deprecado** de `POST /alojamientos/orders/{orderId}/cancel` (comportamiento idéntico; se elimina en v3). **Idempotente** y seguro de reintentar: cancelar una reserva ya `CANCELLED` devuelve `200` con `yaCancelada: true`
-        y el **mismo** `codigoReembolso`. Libera la habitación, publica la actualización de stock por RabbitMQ y emite `alojamiento.reserva.cancelada`.
+        y el **mismo** `codigoReembolso`. Libera la habitación y emite `stock` (gRPC) + evento `alojamiento.reserva.cancelada`.
 
         * `solicitadoPor = SAGA_ORCHESTRATOR` → reembolso **100 %** siempre.
         * `solicitadoPor = CLIENTE` → según `politicaCancelacion` (fuera de ventana se aplica `penalidad`).
@@ -2127,7 +2204,7 @@ paths:
       summary: '[DEPRECADO] Check-out, liquidación de consumos y liberación de habitación'
       description: |
         **Alias deprecado** de `POST /alojamientos/orders/{orderId}/checkout` (comportamiento idéntico; se elimina en v3). Requiere estado `CHECKED_IN`. Liquida consumos de minibar/servicios, revoca la clave digital y pasa la habitación a limpieza.
-        Emite `alojamiento.checkout.completado` y publica la actualización de stock por RabbitMQ.
+        Emite `alojamiento.checkout.completado` y actualiza stock por gRPC.
       parameters:
       - name: id
         in: path
@@ -2182,7 +2259,7 @@ paths:
       summary: '[DEPRECADO] Check-out, liquidación de consumos y liberación de habitación'
       description: |
         **Alias deprecado** de `POST /alojamientos/orders/{orderId}/checkout` (comportamiento idéntico; se elimina en v3). Requiere estado `CHECKED_IN`. Liquida consumos de minibar/servicios, revoca la clave digital y pasa la habitación a limpieza.
-        Emite `alojamiento.checkout.completado` y publica la actualización de stock por RabbitMQ.
+        Emite `alojamiento.checkout.completado` y actualiza stock por gRPC.
       parameters:
       - name: reservationId
         in: path
@@ -2734,6 +2811,62 @@ components:
             instance: /api/v2/alojamientos/orders/create
             code: GATEWAY_TIMEOUT
   schemas:
+    IntegrationCustomerRequestV2:
+      type: object
+      additionalProperties: false
+      required:
+      - nombreCompleto
+      - tipoDocumento
+      - identificacion
+      - email
+      - telefono
+      properties:
+        nombreCompleto:
+          type: string
+          minLength: 3
+          maxLength: 120
+          x-pii: true
+        tipoDocumento:
+          type: string
+          enum:
+          - CEDULA
+          - PASAPORTE
+          - RUC
+        identificacion:
+          type: string
+          maxLength: 13
+          x-pii: true
+        email:
+          type: string
+          format: email
+          maxLength: 120
+          x-pii: true
+        telefono:
+          type: string
+          pattern: '^(\+[0-9]{8,15}|09[0-9]{8})$'
+          x-pii: true
+        nacionalidad:
+          type: string
+          maxLength: 60
+          x-pii: true
+    IntegrationCustomerV2:
+      allOf:
+      - $ref: '#/components/schemas/IntegrationCustomerRequestV2'
+      - type: object
+        required:
+        - id
+        - createdAt
+        - updatedAt
+        properties:
+          id:
+            type: string
+            format: uuid
+          createdAt:
+            type: string
+            format: date-time
+          updatedAt:
+            type: string
+            format: date-time
     ErrorCode:
       type: string
       description: |
@@ -4095,7 +4228,7 @@ components:
         hash:
           type: string
           maxLength: 64
-          description: Huella del contenido para detectar divergencias entre el inventario local y los eventos recibidos.
+          description: Huella del contenido; comparable con `last_sync_hash` del stream gRPC.
         noches:
           type: array
           maxItems: 3000

@@ -29,7 +29,7 @@ async function bootstrap() {
 
   const parsedIntegrationContract: unknown = load(
     readFileSync(
-      join(process.cwd(), 'contracts', 'alojamientos-openapi.yaml'),
+      join(process.cwd(), 'contracts', 'alojamientos-openapi-v2.yaml'),
       'utf8',
     ),
   );

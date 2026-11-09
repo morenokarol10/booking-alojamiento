@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import {
+  BadGatewayException,
   BadRequestException,
   ConflictException,
   Inject,
@@ -7,13 +8,17 @@ import {
   InternalServerErrorException,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { SUPABASE_CLIENT } from '../../supabase/supabase.module';
 import { CreateReservaDto } from './dto/create-reserva.dto';
 import { CancelReservaDto } from './dto/cancel-reserva.dto';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { toReservaDatabase, toReservaEntity } from './entities/reserva.mapper';
+import { CheckinReservaDto } from './dto/checkin-reserva.dto';
 
 @Injectable()
 export class ReservationsService {
@@ -21,6 +26,7 @@ export class ReservationsService {
 
   constructor(
     @Inject(SUPABASE_CLIENT) private readonly supabase: SupabaseClient,
+    private readonly config: ConfigService,
   ) {}
 
   async create(dto: CreateReservaDto, user: AuthenticatedUser) {
@@ -304,6 +310,147 @@ export class ReservationsService {
     };
   }
 
+  async checkIn(externalOrderId: string, dto: CheckinReservaDto) {
+    const { data: reservation, error: lookupError } = await this.supabase
+      .from('reservas')
+      .select(
+        'id,external_order_id,estado_integracion,huespedes_reales,fecha_checkin,fecha_checkout',
+      )
+      .eq('external_order_id', externalOrderId)
+      .maybeSingle();
+    if (lookupError) {
+      throw new InternalServerErrorException(
+        'No se pudo consultar la reserva para registrar el check-in.',
+      );
+    }
+    if (!reservation) {
+      throw new NotFoundException(
+        'No se encontró una reserva vinculada a ese identificador externo.',
+      );
+    }
+    if (reservation.estado_integracion === 'CHECKED_IN') {
+      if (Number(reservation.huespedes_reales) !== dto.huespedesReales) {
+        throw new ConflictException(
+          'El check-in ya fue registrado con otro número de huéspedes.',
+        );
+      }
+      return {
+        data: {
+          external_order_id: externalOrderId,
+          estado: 'CONFIRMADO_ASISTIDO',
+          huespedes_reales: dto.huespedesReales,
+        },
+        message: 'El check-in presencial ya estaba registrado.',
+      };
+    }
+    if (reservation.estado_integracion !== 'CONFIRMED') {
+      throw new ConflictException(
+        'Solo se puede registrar el check-in de una reserva confirmada.',
+      );
+    }
+    const localNow = this.guayaquilDateTime();
+    if (
+      localNow.date < String(reservation.fecha_checkin) ||
+      localNow.date >= String(reservation.fecha_checkout)
+    ) {
+      throw new ConflictException(
+        'El check-in solo se puede registrar durante las fechas de la reserva.',
+      );
+    }
+    if (localNow.minutes < 14 * 60) {
+      throw new UnprocessableEntityException({
+        code: 'CHECKIN_TIME_NOT_REACHED',
+        detail:
+          'El check-in presencial se habilita a partir de las 14:00 hora de Guayaquil.',
+      });
+    }
+
+    const apiKey = this.config.get<string>('API_KEY');
+    if (!apiKey) {
+      throw new ServiceUnavailableException(
+        'Falta configurar API_KEY para enviar el check-in a Booking Core.',
+      );
+    }
+
+    const baseUrl =
+      this.config.get<string>('BOOKING_CORE_API_URL') ??
+      'https://booking-core-api.azurewebsites.net';
+    let checkinUrl: URL;
+    try {
+      checkinUrl = new URL(
+        `/api/v1/reservas/${encodeURIComponent(externalOrderId)}/checkin`,
+        baseUrl,
+      );
+    } catch {
+      throw new ServiceUnavailableException(
+        'BOOKING_CORE_API_URL no contiene una URL válida.',
+      );
+    }
+    if (checkinUrl.protocol !== 'https:') {
+      throw new ServiceUnavailableException(
+        'BOOKING_CORE_API_URL debe usar HTTPS para proteger la API key.',
+      );
+    }
+
+    let upstreamResponse: Response;
+    try {
+      upstreamResponse = await fetch(checkinUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': apiKey,
+        },
+        body: JSON.stringify({
+          external_order_id: externalOrderId,
+          estado: 'CONFIRMADO_ASISTIDO',
+          huespedes_reales: dto.huespedesReales,
+        }),
+        signal: AbortSignal.timeout(10_000),
+      });
+    } catch (error) {
+      this.logger.warn(
+        `No se pudo contactar Booking Core para la orden ${externalOrderId} (${error instanceof Error ? error.name : 'error de red'}).`,
+      );
+      throw new ServiceUnavailableException(
+        'No se pudo contactar Booking Core para confirmar el check-in. Inténtalo nuevamente.',
+      );
+    }
+    if (!upstreamResponse.ok) {
+      throw new BadGatewayException({
+        message: 'Booking Core rechazó el registro de check-in.',
+        upstreamStatus: upstreamResponse.status,
+      });
+    }
+
+    const { data: updated, error: updateError } = await this.supabase
+      .from('reservas')
+      .update({
+        estado_integracion: 'CHECKED_IN',
+        huespedes_reales: dto.huespedesReales,
+      })
+      .eq('id', reservation.id)
+      .eq('estado_integracion', 'CONFIRMED')
+      .select('id')
+      .maybeSingle();
+    if (updateError || !updated) {
+      this.logger.error(
+        `Booking Core confirmó el check-in, pero no se pudo actualizar la orden ${externalOrderId} en Supabase.`,
+      );
+      throw new InternalServerErrorException(
+        'Booking Core confirmó el check-in, pero no se pudo actualizar su estado local. Contacta soporte antes de reintentar.',
+      );
+    }
+
+    return {
+      data: {
+        external_order_id: externalOrderId,
+        estado: 'CONFIRMADO_ASISTIDO',
+        huespedes_reales: dto.huespedesReales,
+      },
+      message: 'Check-in presencial confirmado por Booking Core.',
+    };
+  }
+
   async findMine(user: AuthenticatedUser) {
     const { data, error } = await this.supabase
       .from('reservas')
@@ -329,6 +476,25 @@ export class ReservationsService {
     const startTime = Date.parse(`${start}T00:00:00Z`);
     const endTime = Date.parse(`${end}T00:00:00Z`);
     return (endTime - startTime) / 86_400_000;
+  }
+
+  private guayaquilDateTime(): { date: string; minutes: number } {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/Guayaquil',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    }).formatToParts(new Date());
+    const values = Object.fromEntries(
+      parts.map((part) => [part.type, part.value]),
+    );
+    return {
+      date: `${values.year}-${values.month}-${values.day}`,
+      minutes: Number(values.hour) * 60 + Number(values.minute),
+    };
   }
 }
 

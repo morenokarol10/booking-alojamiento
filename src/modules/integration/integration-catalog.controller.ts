@@ -5,6 +5,7 @@ import {
   Headers,
   HttpCode,
   HttpStatus,
+  Param,
   Post,
   Query,
   Res,
@@ -16,6 +17,7 @@ import { randomUUID } from 'node:crypto';
 import {
   IntegrationAvailabilityDto,
   IntegrationCatalogQueryDto,
+  IntegrationPropertyAvailabilityQueryDto,
   IntegrationSearchDto,
 } from './integration-catalog.dto';
 import { IntegrationCatalogService } from './integration-catalog.service';
@@ -47,6 +49,48 @@ export class IntegrationCatalogController {
       return;
     }
     return result.body;
+  }
+
+  @Get(':id')
+  async detail(
+    @Param('id') id: string,
+    @Headers('x-correlation-id') correlationId: string | undefined,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    response.setHeader('X-Correlation-ID', this.correlationId(correlationId));
+    return this.integrationCatalogService.detail(id);
+  }
+
+  @Get(':id/habitaciones')
+  async rooms(
+    @Param('id') id: string,
+    @Headers('x-correlation-id') correlationId: string | undefined,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    response.setHeader('X-Correlation-ID', this.correlationId(correlationId));
+    return this.integrationCatalogService.rooms(id);
+  }
+
+  @Get(':id/availability')
+  async propertyAvailability(
+    @Param('id') id: string,
+    @Query() query: IntegrationPropertyAvailabilityQueryDto,
+    @Headers('x-correlation-id') correlationId: string | undefined,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    response.setHeader('X-Correlation-ID', this.correlationId(correlationId));
+    return this.integrationCatalogService.propertyAvailability(id, query);
+  }
+
+  @Get(':id/disponibilidad')
+  async propertyAvailabilityAlias(
+    @Param('id') id: string,
+    @Query() query: IntegrationPropertyAvailabilityQueryDto,
+    @Headers('x-correlation-id') correlationId: string | undefined,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    response.setHeader('X-Correlation-ID', this.correlationId(correlationId));
+    return this.integrationCatalogService.propertyAvailability(id, query);
   }
 
   @Post('search')

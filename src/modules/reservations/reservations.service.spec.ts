@@ -1,6 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { ReservationsService } from './reservations.service';
 
+const createService = (supabase: SupabaseClient) =>
+  new ReservationsService(supabase, { get: jest.fn() } as never);
+
 interface QueryResult {
   data: unknown;
   error: { message: string; code?: string } | null;
@@ -57,7 +60,7 @@ class QueryMock {
 
 describe('ReservationsService payment and event flow', () => {
   it('requires contact details from the authenticated profile before reserving', async () => {
-    const service = new ReservationsService({} as SupabaseClient);
+    const service = createService({} as SupabaseClient);
 
     await expect(
       service.create(
@@ -120,7 +123,7 @@ describe('ReservationsService payment and event flow', () => {
           single: async () => ({ data: null, error: missingColumnError }),
         }),
       } as unknown as SupabaseClient;
-      const service = new ReservationsService(supabaseStub);
+      const service = createService(supabaseStub);
 
       await expect(
         service.create(
@@ -176,7 +179,7 @@ describe('ReservationsService payment and event flow', () => {
         },
       ),
     } as unknown as SupabaseClient;
-    const service = new ReservationsService(supabaseStub);
+    const service = createService(supabaseStub);
 
     await expect(
       service.create(
@@ -255,7 +258,7 @@ describe('ReservationsService payment and event flow', () => {
         };
       }),
     } as unknown as SupabaseClient;
-    const service = new ReservationsService(supabaseStub);
+    const service = createService(supabaseStub);
 
     const response = await service.create(
       {
@@ -372,7 +375,7 @@ describe('ReservationsService payment and event flow', () => {
         };
       },
     } as unknown as SupabaseClient;
-    const service = new ReservationsService(supabaseStub);
+    const service = createService(supabaseStub);
 
     const response = await service.findMine({
       id: customerId,
@@ -448,7 +451,7 @@ describe('ReservationsService payment and event flow', () => {
         throw new Error(`Unexpected Supabase table: ${table}`);
       },
     } as unknown as SupabaseClient;
-    const service = new ReservationsService(supabaseStub);
+    const service = createService(supabaseStub);
 
     const response = await service.cancel(
       reservationId,
@@ -491,7 +494,7 @@ describe('ReservationsService payment and event flow', () => {
         }),
       }),
     } as unknown as SupabaseClient;
-    const service = new ReservationsService(supabaseStub);
+    const service = createService(supabaseStub);
 
     await expect(
       service.cancel(

@@ -26,6 +26,6 @@ COPY --from=build --chown=node:node /app/contracts ./contracts
 COPY --chown=node:node scripts ./scripts
 
 USER node
-EXPOSE 10000
+EXPOSE 8080
 
 CMD ["node", "dist/main.js"]

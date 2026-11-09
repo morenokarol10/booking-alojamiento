@@ -6,6 +6,36 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 export const SUPABASE_CLIENT = Symbol('SUPABASE_CLIENT');
 export const SUPABASE_AUTH_CLIENT = Symbol('SUPABASE_AUTH_CLIENT');
 
+function requiredSetting(configService: ConfigService, name: string): string {
+  const value = configService.getOrThrow<string>(name).trim();
+  if (!value) {
+    throw new Error(`${name} must not be empty.`);
+  }
+  return value;
+}
+
+function supabaseUrl(configService: ConfigService): string {
+  const value = requiredSetting(configService, 'SUPABASE_URL');
+  let parsed: URL;
+
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new Error('SUPABASE_URL must be an absolute HTTP or HTTPS URL.');
+  }
+
+  if (
+    !['http:', 'https:'].includes(parsed.protocol) ||
+    !parsed.hostname ||
+    parsed.username ||
+    parsed.password
+  ) {
+    throw new Error('SUPABASE_URL must be an absolute HTTP or HTTPS URL.');
+  }
+
+  return value;
+}
+
 @Global()
 @Module({
   providers: [
@@ -13,16 +43,11 @@ export const SUPABASE_AUTH_CLIENT = Symbol('SUPABASE_AUTH_CLIENT');
       provide: SUPABASE_CLIENT,
       inject: [ConfigService],
       useFactory: (configService: ConfigService): SupabaseClient => {
-        const url = configService.getOrThrow<string>('SUPABASE_URL');
-        const key = configService.getOrThrow<string>(
+        const url = supabaseUrl(configService);
+        const key = requiredSetting(
+          configService,
           'SUPABASE_SERVICE_ROLE_KEY',
         );
-
-        if (!url.trim() || !key.trim()) {
-          throw new Error(
-            'SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must not be empty.',
-          );
-        }
 
         return createClient(url, key, {
           auth: {
@@ -36,12 +61,8 @@ export const SUPABASE_AUTH_CLIENT = Symbol('SUPABASE_AUTH_CLIENT');
       provide: SUPABASE_AUTH_CLIENT,
       inject: [ConfigService],
       useFactory: (configService: ConfigService): SupabaseClient => {
-        const url = configService.getOrThrow<string>('SUPABASE_URL');
-        const key = configService.getOrThrow<string>('SUPABASE_KEY');
-
-        if (!url.trim() || !key.trim()) {
-          throw new Error('SUPABASE_URL and SUPABASE_KEY must not be empty.');
-        }
+        const url = supabaseUrl(configService);
+        const key = requiredSetting(configService, 'SUPABASE_KEY');
 
         return createClient(url, key, {
           auth: {

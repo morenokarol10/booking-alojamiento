@@ -6,6 +6,7 @@ import { AdminModule } from './modules/admin/admin.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { AccommodationsModule } from './modules/accommodations/accommodations.module';
 import { ReservationsModule } from './modules/reservations/reservations.module';
+import { IntegrationModule } from './modules/integration/integration.module';
 import { SupabaseModule } from './supabase/supabase.module';
 
 @Module({
@@ -15,6 +16,7 @@ import { SupabaseModule } from './supabase/supabase.module';
     AuthModule,
     AccommodationsModule,
     ReservationsModule,
+    IntegrationModule,
     AdminModule,
   ],
   controllers: [AppController],

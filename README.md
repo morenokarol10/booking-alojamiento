@@ -8,12 +8,14 @@ La solución utiliza una arquitectura modular orientada a servicios: NestJS
 separa autenticación, alojamientos, reservas y administración; Supabase aporta
 PostgreSQL y Supabase Auth; y el Marketplace y el panel se sirven como recursos
 web estáticos. El enfoque **API-First** se refleja en DTOs validados, contratos
-OpenAPI y controladores REST. El registro de eventos de dominio prepara una
-integración EDA, pero el prototipo todavía no publica eventos en un broker.
+OpenAPI y controladores REST. El log de eventos de la API anterior no publica a
+un broker; el módulo Alojamientos v2 añade una Outbox transaccional y publica
+actualizaciones de stock a RabbitMQ/CloudAMQP.
 
-> **Alcance:** este README documenta el repositorio Booking Prototipo abierto,
-> no un microservicio Alojamientos independiente. La URL pública es un destino
-> configurado, no una prueba de disponibilidad.
+> **Alcance:** Alojamientos v2 se implementa como módulo NestJS dentro de este
+> repositorio; no es una aplicación independiente ni el servicio Booking de
+> otros integrantes. La URL pública es un destino configurado, no una prueba
+> de disponibilidad.
 
 > **Estado del despliegue (4 de noviembre de 2026):** las solicitudes de
 > verificación a Render agotaron el tiempo de espera. En una revisión anterior,
@@ -29,7 +31,7 @@ integración EDA, pero el prototipo todavía no publica eventos en un broker.
 | Backend | NestJS modular, API REST y validación de DTOs |
 | Interfaz | Marketplace, login/registro y panel estáticos servidos por NestJS |
 | Datos y autenticación | PostgreSQL en Supabase y Supabase Auth; operación en producción no verificada |
-| Plataforma configurada | Render Web Service basado en Docker, descrito en [render.yaml](./render.yaml) |
+| Plataforma configurada | Render Web Service basado en Docker, descrito en [render.yaml](./render.yaml); despliegue Azure en preparación |
 | Marketplace público | [booking-alojamiento.onrender.com/marketplace/](https://booking-alojamiento.onrender.com/marketplace/) — no verificado |
 | Panel de administración | [booking-alojamiento.onrender.com/admin/](https://booking-alojamiento.onrender.com/admin/) — no verificado |
 | Swagger integrado | [booking-alojamiento.onrender.com/api/docs](https://booking-alojamiento.onrender.com/api/docs) |
@@ -45,8 +47,78 @@ actualmente saludable, que esté conectado a una instancia de Supabase o que
 los datos en producción estén disponibles.
 
 **No declares cumplidos los criterios que requieren servicio operativo en nube**
-hasta confirmar el estado `Live` en Render, revisar los logs y probar HTTP,
-autenticación y lectura de Supabase con respuestas exitosas.
+hasta confirmar el estado `Live`, revisar los logs y probar HTTP, autenticación
+y lectura de Supabase con respuestas exitosas.
+
+### Preparación de despliegue en Azure App Service
+
+La aplicación escucha en `process.env.PORT` o en `8080`, enlazada a
+`0.0.0.0`. El contenedor también declara el puerto `8080`; en Render se respeta
+el `PORT` que asigna la plataforma.
+
+Para generar un ZIP con artefactos compilados y dependencias de producción
+compatibles con Linux x64 (Node 22), ejecuta desde Windows:
+
+```powershell
+.\scripts\package-azure.ps1
+```
+
+El artefacto validado se crea en `dist/alojamientos-azure.zip`, con
+`dist/main.js`, `contracts/`, la migración v2, recursos web y dependencias en la
+raíz correcta del ZIP. Este paso compila el código y comprueba la estructura del
+paquete, pero **no crea recursos ni despliega** en Azure.
+
+En App Service configura el runtime Node 22, el comando de inicio
+`node dist/main.js`, Always On, `NODE_ENV=production`,
+`SCM_DO_BUILD_DURING_DEPLOYMENT=false` y `ENABLE_ORYX_BUILD=false`. El ZIP ya
+incluye el build y las dependencias de producción instaladas en Ubuntu Linux;
+Azure no debe intentar reinstalarlas. La aplicación toma
+automáticamente el `PORT` que provee App Service y escucha en `0.0.0.0`; no
+fijes un puerto distinto en Azure. Configura `SUPABASE_URL` con la URL HTTPS
+del proyecto, `SUPABASE_KEY` con la clave publicable/anon para autenticación y
+`SUPABASE_SERVICE_ROLE_KEY` con la clave de servidor para operaciones
+administrativas. Ambas claves son requeridas; nunca expongas la service-role
+key al navegador. Añade también `NODE_ID`, `OAUTH_JWKS_URL`, `OAUTH_ISSUER`,
+`OAUTH_AUDIENCE`, `RABBITMQ_URL` (URI `amqps://` de CloudAMQP),
+`EVENT_BUS_MODE=rabbitmq`, `RABBITMQ_EXCHANGE=booking.events`,
+`RABBITMQ_ROUTING_KEY=stock.updated` y `INVENTORY_SERVICE_ID=NODE_ALO_<SIGLAS>`.
+Configura `API_KEY` solo como credencial transitoria; las integraciones nuevas
+deben usar OAuth2 Client Credentials con los scopes del contrato. Guarda
+secretos y configuración privada en Azure Configuration y en GitHub Secrets,
+nunca en el repositorio ni en el paquete ZIP.
+
+La migración `202611080001_alojamientos_v2_core.sql` ya fue aplicada en el
+proyecto Supabase que se usará; no la ejecutes de nuevo. El workflow de GitHub
+no ejecuta SQL ni modifica la base. Configura el Health check de App Service en
+`/api/v2/alojamientos/health`; la aplicación necesita acceso de salida a
+Supabase y CloudAMQP. Si falta `RABBITMQ_URL`, los eventos quedan en la Outbox y
+se informa en los logs.
+
+El inicio de sesión de Azure CLI y la suscripción `Azure for Students` están
+disponibles en el entorno de desarrollo, pero no se ha creado ni desplegado
+ningún recurso. La disponibilidad de SKU, región, cuota, permisos y nombres
+de aplicación debe confirmarse antes de crear recursos facturables.
+
+#### Despliegue automático desde GitHub
+
+El workflow [azure-app-service.yml](./.github/workflows/azure-app-service.yml)
+se ejecuta en cada push a `main` y manualmente desde GitHub Actions. Ejecuta
+lint, pruebas y build, crea un ZIP Linux con dependencias de producción, lo
+publica en App Service y espera que el endpoint de health responda HTTP 200.
+Si aún no existe/configuraste la Web App en GitHub, solo ejecuta validaciones y
+omite el despliegue. Así no es necesario subir el ZIP manualmente.
+
+En GitHub, abre **Settings → Secrets and variables → Actions** y configura:
+
+- Repository variable `AZURE_WEBAPP_NAME`: nombre exacto de la Web App.
+- Repository secret `AZURE_WEBAPP_PUBLISH_PROFILE`: contenido completo del
+  perfil de publicación descargado desde Azure Portal → Web App → **Get publish
+  profile**. Es una credencial de despliegue; rótala si se expone.
+
+Configura en Azure Node 22 LTS, startup command `node dist/main.js`, Always On y
+las variables de aplicación listadas arriba. Después sube los cambios a `main`
+y revisa el resultado en GitHub → **Actions**. Los secretos de runtime deben
+guardarse en Azure, no como variables de CI.
 
 ## 2. Matriz de cumplimiento de la rúbrica
 
@@ -60,28 +132,34 @@ servicio remoto esté disponible.
 | 1 | Despliegue en la nube (Render) | **No verificable**: timeout el 2026-11-04; HTTP 503 histórico | [render.yaml](./render.yaml), [Dockerfile](./Dockerfile), [despliegue](#6-despliegue-en-render) |
 | 2 | Sistema de administración funcional | **Implementado en código**; operación pública no verificada | [public/admin/](./public/admin/), [controlador admin](./src/modules/admin/admin.controller.ts), rutas protegidas por `admin` |
 | 3 | Marketplace web funcional | **Implementado en código**; operación pública no verificada | [public/](./public/), catálogo, filtros, perfil y flujo de reserva |
-| 4 | APIs implementadas y documentadas con Swagger/OpenAPI | **Implementado en código**; una prueba de combinación OpenAPI falla actualmente | [controladores](./src/modules/), [OpenAPI del producto](./contracts/booking-ec-project.openapi.yaml), [OpenAPI GDS](./contracts/alojamientos-openapi.yaml) |
+| 4 | APIs implementadas y documentadas con Swagger/OpenAPI | **Rutas Alojamientos v2 prioritarias implementadas en código**; operación pública no verificada | [módulo de integración](./src/modules/integration/), [OpenAPI GDS](./contracts/alojamientos-openapi.yaml) |
 | 5 | Base de datos en la nube (Supabase/PostgreSQL) | **Esquema y acceso implementados**; conexión de producción no verificada; 3FN estricta no acreditada | [database/schema.sql](./database/schema.sql), migraciones de [database/migrations/](./database/migrations/) |
-| 6 | Diseño API-First y preparación para integración | **Parcial**: DTOs, validación y mapeadores; la API local no implementa por completo el contrato GDS | [contratos](./contracts/), [módulos](./src/modules/) |
-| 7 | Contratos y endpoints para interoperabilidad | **Parcial**: contratos y rutas descritos; rutas/modelos GDS y locales son diferentes | [OpenAPI GDS](./contracts/alojamientos-openapi.yaml), [OpenAPI del producto](./contracts/booking-ec-project.openapi.yaml) |
-| 8 | Diseño preliminar EDA o registro de eventos | **Parcial**: se registra `ReservaRealizadaEvent`; no hay broker ni Outbox transaccional | [servicio de reservas](./src/modules/reservations/reservations.service.ts), `eventos_log` |
+| 6 | Diseño API-First y preparación para integración | **Implementado para los flujos prioritarios v2**; el usuario reporta la migración aplicada, pendiente verificar el esquema y conectividad | [contrato](./contracts/alojamientos-openapi.yaml), [módulos de integración](./src/modules/integration/) |
+| 7 | Contratos y endpoints para interoperabilidad | **Implementados en código**: salud, catálogo, búsqueda, cotización, órdenes idempotentes, eventos y snapshot de inventario; operación externa no verificada | [controladores v2](./src/modules/integration/), [OpenAPI GDS](./contracts/alojamientos-openapi.yaml) |
+| 8 | Diseño preliminar EDA o registro de eventos | **Outbox transaccional y publicación confirmada de stock a RabbitMQ implementados en código**; CloudAMQP y cola consumidora de Booking aún deben configurarse y probarse | [migración v2](./database/migrations/202611080001_alojamientos_v2_core.sql), [servicio RabbitMQ](./src/modules/integration/integration-stock-sync.service.ts) |
 | 9 | Documentación técnica mínima | **Cumple**: arquitectura, modelo, rutas, ejecución y despliegue están documentados | Este README, [schema SQL](./database/schema.sql), contratos OpenAPI |
 | 10 | Dominio del código por parte del estudiante | **Evidencia para sustentar**: decisiones y flujos están descritos; debe demostrarse en la defensa | Secciones de arquitectura, seguridad, datos y eventos de este README |
 
 ### Observaciones importantes para la evaluación
 
-1. El contrato externo [alojamientos-openapi.yaml](./contracts/alojamientos-openapi.yaml)
-   describe **GDS Alojamientos Core API v1.0.0**: incluye rutas como `/search`
-   y `/orders/create`, y no define el conjunto local
-   `/api/v1/alojamientos` y `/api/v1/reservas` ni los modelos solicitados en
-   este prototipo. Se conserva sin cambios por su uso en la integración. El
-   contrato propio del producto es
+1. El contrato de integración
+   [alojamientos-openapi.yaml](./contracts/alojamientos-openapi.yaml) describe
+   **API de Alojamientos v2.2.0**. Las rutas implementadas en NestJS usan el
+   prefijo `/api/v2/alojamientos`; incluyen salud, catálogo, búsqueda,
+   cotización, creación/cancelación idempotentes, feed de eventos y snapshot
+   de inventario. La operación real requiere la migración v2, credenciales
+   OAuth/API key y RabbitMQ configurados. El contrato propio del producto es
    [booking-ec-project.openapi.yaml](./contracts/booking-ec-project.openapi.yaml);
    NestJS toma de este el título, la descripción, la versión y las etiquetas
    para Swagger, y genera las operaciones runtime desde los controladores.
    Son contratos distintos y no se declara que la API local implemente el GDS.
-2. El esquema actual contiene cuatro tablas de dominio. `proveedor_id` es un UUID
-   sin tabla `proveedores` ni clave foránea en el script actual.
+2. `database/schema.sql` conserva el esquema base del prototipo. La migración
+   [202611080001_alojamientos_v2_core.sql](./database/migrations/202611080001_alojamientos_v2_core.sql)
+   añade la base de datos para el contrato v2 (tipos de habitación, inventario
+   diario, cotizaciones, idempotencia y outbox); debe aplicarse en Supabase antes
+   de habilitar esas operaciones. El SQL aún debe validarse contra una base de
+   prueba Supabase antes del despliegue. `proveedor_id` sigue siendo un UUID sin tabla `proveedores` ni clave
+   foránea en el esquema base.
 3. `servicios` y `urls_imagenes` son arreglos PostgreSQL `TEXT[]`, no JSONB ni
    tablas relacionales propias. La API conserva `imagenes` en camelCase y el
    mapper lo traduce a `urls_imagenes`. Las coordenadas del alojamiento se
@@ -91,8 +169,10 @@ servicio remoto esté disponible.
    como normalizado estrictamente en 3FN.
 4. El pago es una simulación local. No hay cobro real ni integración con
    pasarela de pagos.
-5. La API guarda la reserva y luego escribe el evento en otra operación REST.
-   Si falla la escritura del evento, la reserva podría ya existir.
+5. El flujo anterior `/api/v1/reservas` conserva un log de eventos separado.
+   Las órdenes v2 usan una Outbox PostgreSQL en la misma transacción; la entrega
+   RabbitMQ es asíncrona y requiere configurar CloudAMQP y el binding de la
+   cola de Booking.
 
 ## 3. Rutas principales
 
@@ -102,6 +182,12 @@ servicio remoto esté disponible.
 | Marketplace Web | `/marketplace/` | Catálogo y flujo de reserva. |
 | Inicio de sesión y registro | `/login/` | Autenticación y alta de clientes. |
 | Panel de Administración | `/admin/` | Gestión administrativa protegida por rol. |
+| Salud de integración Alojamientos v2 | `GET /api/v2/alojamientos/health` | Semáforo y comprobación de Supabase con timeout acotado. |
+| Catálogo y búsqueda v2 | `GET /api/v2/alojamientos`, `POST /api/v2/alojamientos/search` | Catálogo, filtros y precio total por estancia. |
+| Cotización v2 | `POST /api/v2/alojamientos/availability` | Precio congelado durante 30 minutos, sin retener inventario. |
+| Saga de reservas v2 | `POST /api/v2/alojamientos/orders/create`, `POST /api/v2/alojamientos/orders/{orderId}/cancel` | Creación y compensación idempotentes con sincronización de inventario. |
+| Interoperabilidad de stock | RabbitMQ/CloudAMQP, exchange `booking.events`, routing key `stock.updated` | Outbox transaccional con mensajes persistentes, publisher confirms y reintentos. |
+| Recuperación e inventario | `GET /api/v2/alojamientos/eventos`, `GET /api/v2/alojamientos/{id}/inventario` | Feed CloudEvents y snapshot con hash para reconciliación. |
 | Swagger/OpenAPI combinado | `/api/docs` | Documentación del contrato de integración y de la API del producto. |
 | Swagger de NestJS | `/api/project-docs` | Documentación generada desde controladores NestJS. |
 
@@ -506,17 +592,13 @@ evento `ReservaRealizadaEvent` en `eventos_log`. El payload contiene
 `eventId`, `eventType`, `occurredAt` y datos de la reserva. El Panel Admin
 consulta ese registro para monitorear el flujo.
 
-El estado actual es una **preparación EDA**, no un bus de eventos. Las dos
-escrituras a Supabase no son una transacción atómica; si la segunda falla, la
-reserva puede persistir sin evento. Para robustecerlo en una siguiente fase:
-
-1. Insertar reserva y Outbox dentro de una transacción PostgreSQL.
-2. Publicar Outbox en RabbitMQ, Kafka, Pub/Sub u otro broker mediante un
-   dispatcher con reintentos.
-3. Definir contrato versionado (por ejemplo, AsyncAPI/JSON Schema), claves de
-   idempotencia, correlación y trazabilidad.
-4. Crear consumidores desacoplados de notificaciones, facturación y analítica,
-   con dead-letter queue y métricas.
+El flujo de órdenes v2 escribe reserva y Outbox dentro de la misma transacción
+PostgreSQL y un dispatcher publica stock a RabbitMQ con publisher confirms y
+reintentos. La integración externa depende de que Booking cree una cola durable,
+la vincule a `booking.events` con la routing key `stock.updated`, y deduplique
+mensajes por `messageId` si se reintenta después de una confirmación ambigua.
+El registro anterior `/api/v1/reservas` conserva su propio `eventos_log` y no
+usa esta Outbox.
 
 ### 4.8 Estructura del Proyecto y Decisiones Arquitecturales
 
@@ -577,8 +659,8 @@ completo y justifica las decisiones que lo implementan:
 4. Describe las tablas, las claves foráneas, las políticas RLS y las decisiones
    que impiden afirmar que el esquema actual cumple 3FN estricta.
 5. Distingue el contrato GDS de integración del OpenAPI de la API local; explica
-   también que `ReservaRealizadaEvent` se guarda en una tabla y aún no se
-   entrega mediante un broker ni una Outbox atómica.
+   la Outbox transaccional v2, la publicación RabbitMQ y la diferencia con el
+   registro histórico de eventos del flujo anterior.
 6. Ejecuta las pruebas disponibles y presenta sus resultados reales:
    `npm test -- --runInBand`, `npm run build` y `npm run lint`. No describas una
    limitación documentada como si ya estuviera resuelta.
@@ -602,7 +684,8 @@ Set-Location booking-alojamiento
 
 ### Variables de entorno
 
-Copia [.env.example](./.env.example) a `.env` y completa los secretos localmente:
+Copia [.env.example](./.env.example) a `.env` y completa los secretos localmente.
+Las variables de integración Alojamientos v2 son:
 
 ```env
 SUPABASE_URL=https://your-project.supabase.co
@@ -610,43 +693,67 @@ SUPABASE_KEY=your-anon-or-publishable-key
 SUPABASE_SERVICE_ROLE_KEY=your-private-service-role-key
 ADMIN_SEED_PASSWORD=una-clave-local-segura-de-al-menos-12-caracteres
 PORT=3000
+NODE_ID=alojamientos
+API_KEY=una-clave-aleatoria-transitoria
+OAUTH_JWKS_URL=https://identity.example/.well-known/jwks.json
+OAUTH_ISSUER=https://identity.example/
+OAUTH_AUDIENCE=alojamientos
+RABBITMQ_URL=
+EVENT_BUS_MODE=rabbitmq
+RABBITMQ_EXCHANGE=booking.events
+RABBITMQ_ROUTING_KEY=stock.updated
+INVENTORY_SERVICE_ID=NODE_ALO_SIGLAS
 ```
 
 No agregues `.env` al repositorio. `SUPABASE_KEY` es para los flujos de Auth;
 `SUPABASE_SERVICE_ROLE_KEY` solo se usa por el servidor y script de seeding.
+No compartas ni envíes credenciales por chat; en Azure se configuran directamente
+en Application Settings.
 
 ### Preparar base y arrancar
 
-1. Para proyecto nuevo, ejecuta [database/schema.sql](./database/schema.sql)
+1. En un proyecto nuevo, ejecuta [database/schema.sql](./database/schema.sql)
    en el SQL Editor de Supabase.
-2. Para una base previa, ejecuta primero
-   `database/migrations/20261007_contract_alignment.sql`,
-   `database/migrations/20261008_auth_and_rls.sql`,
-   `database/migrations/20261009_rename_alojamientos_imagenes.sql` y
-   `database/migrations/20261010_render_schema_cache.sql` y
-   `database/migrations/20261011_booking_admin_schema.sql`, en ese orden;
-   luego ejecuta `database/migrations/202612100001_create_favoritos.sql`.
-3. Instala y compila:
+2. Para una base existente, aplica únicamente las migraciones todavía no
+   ejecutadas y en orden cronológico:
+   `20261007_contract_alignment.sql`, `20261008_auth_and_rls.sql`,
+   `20261009_rename_alojamientos_imagenes.sql`,
+   `20261010_render_schema_cache.sql`,
+   `20261011_booking_admin_schema.sql`,
+   `20261012_reservas_payment_method.sql`,
+   `20261013_atomic_booking_availability.sql`,
+   `20261028_integration_contract_v2.sql`,
+   `202611080001_alojamientos_v2_core.sql` y
+   `202612100001_create_favoritos.sql`. No vuelvas a ejecutar una migración que
+   ya esté aplicada.
+3. La migración v2 requiere la estructura base de `alojamientos` y `reservas`.
+   Para el proyecto Supabase que se usará con Azure, el usuario confirmó que
+   `202611080001_alojamientos_v2_core.sql` ya se ejecutó. Antes de integrar,
+   corre la consulta de solo lectura
+   [verify_alojamientos_v2.sql](./database/verify_alojamientos_v2.sql) en SQL
+   Editor y confirma que las tablas, funciones y triggers aparecen. No recrees
+   una base ni vuelvas a aplicar esa migración.
+4. Instala y compila:
 
    ```powershell
    npm install
    npm run build
    ```
 
-4. Inicia en desarrollo:
+5. Inicia en desarrollo:
 
    ```powershell
    npm run start:dev
    ```
 
-5. Para ejecutar la compilación como producción en local:
+6. Para ejecutar la compilación como producción en local:
 
    ```powershell
    npm run build
    npm run start:prod
    ```
 
-6. Si necesitas el usuario de demostración, configura `ADMIN_SEED_PASSWORD`
+7. Si necesitas el usuario de demostración, configura `ADMIN_SEED_PASSWORD`
    localmente y ejecuta `npm run seed:admin`.
 
 Rutas locales con `PORT=3000`:

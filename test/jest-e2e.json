@@ -1,9 +1,28 @@
 {
   "moduleFileExtensions": ["js", "json", "ts"],
-  "rootDir": ".",
+  "rootDir": "..",
   "testEnvironment": "node",
-  "testRegex": ".e2e-spec.ts$",
+  "testRegex": "test/.*\\.e2e-spec.ts$",
   "transform": {
-    "^.+\\.(t|j)s$": "ts-jest"
-  }
+    "^.+\\.(t|j)s$": [
+      "ts-jest",
+      {
+        "useESM": true,
+        "tsconfig": {
+          "module": "ESNext",
+          "moduleResolution": "Bundler",
+          "target": "ES2023",
+          "esModuleInterop": true,
+          "isolatedModules": true,
+          "emitDecoratorMetadata": true,
+          "experimentalDecorators": true,
+          "allowSyntheticDefaultImports": true,
+          "strict": true,
+          "skipLibCheck": true
+        }
+      }
+    ]
+  },
+  "extensionsToTreatAsEsm": [".ts"],
+  "setupFilesAfterEnv": ["<rootDir>/test/jest-globals.ts"]
 }

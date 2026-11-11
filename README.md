@@ -188,6 +188,56 @@ lint, pruebas y build, crea un ZIP Linux con dependencias de producción,
 publica en `alojamiento-karol-puce` usando OIDC y espera que el endpoint de
 health responda HTTP 200. No mantengas otro workflow de producción para la
 misma Web App.
+
+##### Smoke E2E contra Azure
+
+`npm run test:e2e:booking` ejecuta comprobaciones HTTP reales de health,
+conectividad con Supabase, ficha, tipos de habitación, disponibilidad positiva
+y cotización. La cotización crea un registro persistente, pero no retiene
+inventario. El runner no lee `.env`; pasa las variables explícitamente en la
+terminal. Usa una propiedad y fechas para las que se haya cargado inventario:
+
+```powershell
+$env:E2E_BASE_URL = 'https://alojamiento-karol-puce.azurewebsites.net/api/v2'
+$env:E2E_ALOJAMIENTO_ID = 'HTL-...'
+$env:E2E_CHECKIN = 'YYYY-MM-DD'
+$env:E2E_CHECKOUT = 'YYYY-MM-DD'
+$env:E2E_HABITACIONES = '1'
+$env:E2E_ADULTOS = '2'
+npm run test:e2e:booking
+```
+
+La reserva/cancelación real es opt-in (`E2E_RUN_BOOKING=true` y
+`E2E_ALLOW_LIVE_BOOKING=YES`), requiere `API_KEY` y un tipo de habitación con
+stock para esas fechas. El script reintenta creación idempotente y cancela la
+reserva de prueba; ejecuta el flujo solo con una propiedad/fechas designadas
+para pruebas. `E2E_RUN_CUSTOMER_SYNC=true` prueba GET/POST de huéspedes y crea
+un registro sintético de prueba. `E2E_RUN_CHECKIN=true` requiere un
+`E2E_CHECKIN_ORDER_ID` (el identificador externo `ORD-HTL-...`) existente y un
+`E2E_ADMIN_BEARER_TOKEN`; cambia el estado de esa reserva real, por lo que solo
+debe usarse con una reserva de prueba confirmada para la fecha del check-in.
+
+Después de una prueba de reserva/cancelación, confirma en Supabase que Booking
+recibió los snapshots del stock. Sustituye el UUID por el `OUTBOX_ORDER_ID`
+impreso por el script:
+
+```sql
+SELECT
+  data->>'fecha' AS fecha,
+  COUNT(*) AS eventos_stock,
+  COUNT(*) FILTER (WHERE delivered_at IS NOT NULL) AS entregados,
+  COUNT(*) FILTER (WHERE delivered_at IS NULL) AS pendientes
+FROM public.integracion_outbox
+WHERE type = 'alojamiento.stock.actualizado'
+  AND correlation_id = 'reservation:<OUTBOX_ORDER_ID>'
+GROUP BY data->>'fecha'
+ORDER BY fecha;
+```
+
+Espera a que `pendientes` llegue a cero. Si siguen pendientes, revisa
+`attempts` y `last_error` en la tabla Outbox y los logs de App Service. El envío
+HTTP 2xx confirma la aceptación del endpoint de Booking; confirma aparte con
+Booking que su inventario refleje el cambio.
 Si aún no existe/configuraste la Web App en GitHub, solo ejecuta validaciones y
 omite el despliegue. Así no es necesario subir el ZIP manualmente.
 

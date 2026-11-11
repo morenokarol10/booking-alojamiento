@@ -244,6 +244,8 @@ async function loadUsers() {
   }
 }
 
+let bookingsById = new Map();
+
 async function loadBookings(silent = false) {
   if (bookingsLoading) return;
   bookingsLoading = true;
@@ -287,6 +289,8 @@ async function loadBookings(silent = false) {
             formatMoney(total, currency),
           ).join(' · ')
         : formatMoney(0);
+    bookingsById = new Map(bookings.map((booking) => [booking.id, booking]));
+    const isAdmin = currentUser?.role === 'admin';
     bookingBody.innerHTML = bookings
       .map((booking) => {
         const accommodation = booking.alojamiento?.nombre || 'Alojamiento';
@@ -305,15 +309,33 @@ async function loadBookings(silent = false) {
               })
               .join('')
           : '<small>Habitación sin asignación</small>';
-        const operationsCell =
+        const cancelButton =
           booking.estadoIntegracion === 'CONFIRMED'
+            ? `<button class="row-action delete" type="button" data-action="cancel" data-reservation-id="${escapeHtml(booking.id)}" aria-label="Cancelar la reserva de ${escapeHtml(booking.clienteNombre)}">Cancelar reserva</button>`
+            : '';
+        const adminOperations = !isAdmin
+          ? ''
+          : booking.estadoIntegracion === 'CONFIRMED'
             ? `<button class="row-action" type="button" data-action="checkin" data-reservation-id="${escapeHtml(booking.id)}"${booking.externalOrderId ? ` data-order-id="${escapeHtml(booking.externalOrderId)}"` : ''}>Registrar llegada</button>`
             : booking.estadoIntegracion === 'CHECKED_IN'
               ? `<button class="row-action" type="button" data-action="checkout" data-reservation-id="${escapeHtml(booking.id)}">Registrar salida</button>`
               : booking.estadoIntegracion === 'CHECKED_OUT' &&
                   assignedRooms.some((room) => room.estado === 'LIMPIEZA')
                 ? `<button class="row-action" type="button" data-action="mark-clean" data-reservation-id="${escapeHtml(booking.id)}">Marcar limpia</button>`
-                : '—';
+                : '';
+        const operationsCell =
+          adminOperations || cancelButton
+            ? `<div class="row-actions-stack">${adminOperations}${cancelButton}</div>`
+            : '—';
+        const cancellationNote =
+          booking.estado === 'cancelada' && booking.canceladaPor
+            ? `<small class="cancel-note">Por ${escapeHtml(CANCELLED_BY_LABELS[booking.canceladaPor] || booking.canceladaPor)}${
+                booking.porcentajeReembolso !== null &&
+                booking.porcentajeReembolso !== undefined
+                  ? ` · reembolso ${Number(booking.porcentajeReembolso)} %`
+                  : ''
+              }${booking.motivoCancelacion ? ` · ${escapeHtml(booking.motivoCancelacion)}` : ''}</small>`
+            : '';
         const source = booking.externalOrderId
           ? `Booking · ${booking.externalOrderId}`
           : 'Marketplace';
@@ -334,7 +356,7 @@ async function loadBookings(silent = false) {
             <td><div class="guest-cell"><strong>${escapeHtml(accommodation)}</strong><small>${escapeHtml(source)}</small></div></td>
             <td class="stay-cell">${formatDate(booking.fechaCheckin)} – ${formatDate(booking.fechaCheckout)}<small>${escapeHtml(roomDetails)}</small></td>
             <td class="price-cell">${formatMoney(booking.precioTotal, booking.moneda)}</td>
-            <td><span class="status-badge ${escapeHtml(booking.estado)}">${escapeHtml(status)}</span><small>${escapeHtml(integrationStatus)}</small></td>
+            <td><span class="status-badge ${escapeHtml(booking.estado)}">${escapeHtml(status)}</span><small>${escapeHtml(integrationStatus)}</small>${cancellationNote}</td>
             <td>${formatDate(booking.createdAt)}</td>
             <td>${roomDetailsMarkup}${operationsCell}</td>
           </tr>`;
@@ -652,6 +674,11 @@ bookingBody.addEventListener('click', async (event) => {
     showToast('La reserva no tiene un identificador válido.', true);
     return;
   }
+  if (action === 'cancel') {
+    const booking = bookingsById.get(reservationId);
+    if (booking) openCancelBooking(booking);
+    return;
+  }
   let huespedesReales;
   if (action === 'checkin') {
     const value = window.prompt('¿Cuántos huéspedes llegaron realmente?', '1');
@@ -784,9 +811,8 @@ async function initializeAdmin() {
     document.querySelector('#admin-auth-check').hidden = true;
     await Promise.all([
       loadListings(),
-      ...(user.role === 'admin'
-        ? [loadBookings(), loadEvents(), loadUsers()]
-        : []),
+      loadBookings(),
+      ...(user.role === 'admin' ? [loadEvents(), loadUsers()] : []),
     ]);
   } catch (error) {
     console.error('No se pudo validar el acceso administrativo.', error);
@@ -794,9 +820,126 @@ async function initializeAdmin() {
   }
 }
 
+// ---- Cancelación de reservas por administradores y empleados ----
+const cancelBookingDialog = document.querySelector('#cancel-booking-dialog');
+const cancelBookingForm = document.querySelector('#cancel-booking-form');
+const cancelBookingSummary = document.querySelector('#cancel-booking-summary');
+const cancelPolicyResult = document.querySelector('#cancel-policy-result');
+const cancelBookingError = document.querySelector('#cancel-booking-error');
+const confirmCancelButton = document.querySelector('#confirm-cancel-booking');
+let pendingCancellation = null;
+
+const CANCELLED_BY_LABELS = {
+  CLIENTE: 'el cliente',
+  ADMIN: 'el personal (pedido del huésped)',
+  HOTEL: 'el hotel',
+  SAGA_ORCHESTRATOR: 'Booking (compensación)',
+};
+
+// Misma regla que cancel_alojamiento_order_v2: 100 % hasta 48 h antes del
+// check-in a las 14:00 de Guayaquil (UTC-5, sin horario de verano).
+function refundPreview(booking, source) {
+  const total = Number(booking.precioTotal) || 0;
+  if (source === 'HOTEL') return { percent: 100, amount: total, deadline: null };
+  const checkinUtc = Date.parse(`${booking.fechaCheckin}T14:00:00-05:00`);
+  const deadline = new Date(checkinUtc - 48 * 3600 * 1000);
+  const percent = Date.now() <= deadline.getTime() ? 100 : 0;
+  return { percent, amount: (total * percent) / 100, deadline };
+}
+
+function renderCancellationPolicy() {
+  if (!pendingCancellation) return;
+  const source = cancelBookingForm.elements.solicitadoPor.value;
+  const preview = refundPreview(pendingCancellation, source);
+  const currency = pendingCancellation.moneda || 'USD';
+  const deadlineText = preview.deadline
+    ? new Intl.DateTimeFormat('es-EC', {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+        timeZone: 'America/Guayaquil',
+      }).format(preview.deadline)
+    : '';
+  cancelPolicyResult.dataset.refund = preview.percent > 0 ? 'full' : 'none';
+  cancelPolicyResult.innerHTML =
+    preview.percent > 0
+      ? `<strong>Reembolso del ${preview.percent} %: ${escapeHtml(formatMoney(preview.amount, currency))}</strong><small>${
+          source === 'HOTEL'
+            ? 'El hotel asume la cancelación.'
+            : `Dentro del plazo gratuito (hasta el ${escapeHtml(deadlineText)}).`
+        }</small>`
+      : `<strong>Sin reembolso: penalidad de ${escapeHtml(formatMoney(Number(pendingCancellation.precioTotal) || 0, currency))}</strong><small>El plazo gratuito terminó el ${escapeHtml(deadlineText)}. Si la cancelación es por causa del hotel, elige “El hotel”.</small>`;
+}
+
+function openCancelBooking(booking) {
+  pendingCancellation = booking;
+  cancelBookingForm.reset();
+  cancelBookingError.hidden = true;
+  confirmCancelButton.disabled = false;
+  confirmCancelButton.textContent = 'Sí, cancelar reserva';
+  const source = booking.externalOrderId
+    ? ` · reserva de Booking ${booking.externalOrderId} (se notificará a Booking)`
+    : '';
+  cancelBookingSummary.textContent = `${booking.clienteNombre || 'Huésped'} · ${booking.alojamiento?.nombre || 'Alojamiento'} · ${formatDate(booking.fechaCheckin)} – ${formatDate(booking.fechaCheckout)} · ${formatMoney(booking.precioTotal, booking.moneda)}${source}. Las habitaciones quedarán libres para otras reservas.`;
+  renderCancellationPolicy();
+  cancelBookingDialog.showModal();
+  cancelBookingForm.elements.motivo.focus();
+}
+
+cancelBookingForm.addEventListener('change', (event) => {
+  if (event.target.name === 'solicitadoPor') renderCancellationPolicy();
+});
+
+cancelBookingForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  if (!pendingCancellation) return;
+  const motivo = cancelBookingForm.elements.motivo.value.trim();
+  if (motivo.length < 3) {
+    cancelBookingError.textContent =
+      'Escribe el motivo de la cancelación (mínimo 3 caracteres).';
+    cancelBookingError.hidden = false;
+    cancelBookingForm.elements.motivo.focus();
+    return;
+  }
+  cancelBookingError.hidden = true;
+  confirmCancelButton.disabled = true;
+  confirmCancelButton.textContent = 'Cancelando…';
+  try {
+    const result = await apiRequest(
+      `/reservas/${encodeURIComponent(pendingCancellation.id)}/cancelar-admin`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          solicitadoPor: cancelBookingForm.elements.solicitadoPor.value,
+          motivo,
+        }),
+      },
+    );
+    pendingCancellation = null;
+    cancelBookingDialog.close();
+    showToast(result?.message || 'Reserva cancelada.');
+    await loadBookings();
+  } catch (requestError) {
+    cancelBookingError.textContent = requestError.message;
+    cancelBookingError.hidden = false;
+    confirmCancelButton.disabled = false;
+    confirmCancelButton.textContent = 'Sí, cancelar reserva';
+  }
+});
+
+cancelBookingDialog.addEventListener('click', (event) => {
+  if (event.target === cancelBookingDialog) cancelBookingDialog.close();
+});
+cancelBookingDialog.addEventListener('close', () => {
+  pendingCancellation = null;
+});
+
 void initializeAdmin();
 window.setInterval(() => {
-  if (!document.hidden && currentUser?.role === 'admin') {
+  if (
+    !document.hidden &&
+    (currentUser?.role === 'admin' || currentUser?.role === 'empleado') &&
+    !cancelBookingDialog.open
+  ) {
     void loadBookings(true);
   }
 }, 30_000);

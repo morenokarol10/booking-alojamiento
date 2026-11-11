@@ -28,6 +28,7 @@ import {
 } from '@nestjs/swagger';
 import { CreateReservaDto } from './dto/create-reserva.dto';
 import { CancelReservaDto } from './dto/cancel-reserva.dto';
+import { StaffCancelReservaDto } from './dto/staff-cancel-reserva.dto';
 import { CheckinReservaDto } from './dto/checkin-reserva.dto';
 import { CheckOutDto } from './dto/check-out.dto';
 import {
@@ -117,12 +118,39 @@ export class ReservationsController {
     return this.reservationsService.cancel(id, dto, request.user);
   }
 
-  @Get()
+  @Post(':id/cancelar-admin')
   @UseGuards(SupabaseAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('admin', 'empleado')
   @ApiBearerAuth('supabase-jwt')
   @ApiUnauthorizedResponse({ description: 'Token ausente o no válido.' })
-  @ApiForbiddenResponse({ description: 'Se requiere rol admin.' })
+  @ApiForbiddenResponse({ description: 'Se requiere rol admin o empleado.' })
+  @ApiOperation({
+    summary:
+      'Cancelar una reserva desde el panel (por pedido del huésped o del hotel)',
+  })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiOkResponse({ description: 'Reserva cancelada con la política aplicada.' })
+  @ApiNotFoundResponse({ description: 'Reserva no encontrada.' })
+  @ApiConflictResponse({
+    description: 'La reserva ya tiene check-in o check-out.',
+  })
+  cancelByStaff(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: StaffCancelReservaDto,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    if (!request.user) {
+      throw new UnauthorizedException('La sesión no está autenticada.');
+    }
+    return this.reservationsService.cancelByStaff(id, dto, request.user);
+  }
+
+  @Get()
+  @UseGuards(SupabaseAuthGuard, RolesGuard)
+  @Roles('admin', 'empleado')
+  @ApiBearerAuth('supabase-jwt')
+  @ApiUnauthorizedResponse({ description: 'Token ausente o no válido.' })
+  @ApiForbiddenResponse({ description: 'Se requiere rol admin o empleado.' })
   @ApiOperation({ summary: 'Consultar reservas (Administración)' })
   @ApiOkResponse({
     description: 'Lista de reservas con su alojamiento.',

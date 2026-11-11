@@ -48,6 +48,11 @@ export function toReservaEntity(row: Record<string, unknown>): ReservaEntity {
     estadoIntegracion: nullableString(row.estado_integracion),
     huespedesReales: nullableNumber(row.huespedes_reales),
     cotizacionId: nullableString(row.cotizacion_id),
+    canceladaPor: nullableString(row.cancelada_por),
+    canceladaEn: nullableString(row.cancelada_en),
+    motivoCancelacion: nullableString(row.motivo_cancelacion),
+    porcentajeReembolso: nullableNumber(row.porcentaje_reembolso),
+    montoReembolsado: nullableNumber(row.monto_reembolsado),
     habitacionesAsignadas: mapAssignedRooms(row.reservas_unidades_habitacion),
   };
 

@@ -20,6 +20,7 @@ import type { AuthenticatedUser } from '../auth/auth.types';
 import { toReservaEntity } from './entities/reserva.mapper';
 import { CheckinReservaDto } from './dto/checkin-reserva.dto';
 import { CheckOutDto } from './dto/check-out.dto';
+import { StaffCancelReservaDto } from './dto/staff-cancel-reserva.dto';
 
 @Injectable()
 export class ReservationsService {
@@ -246,74 +247,163 @@ export class ReservationsService {
     if (
       existing.estado !== 'confirmada' ||
       typeof existing.fecha_checkin !== 'string' ||
-      existing.fecha_checkin <= new Date().toISOString().slice(0, 10)
+      existing.fecha_checkin < this.guayaquilDateTime().date
     ) {
       throw new ConflictException(
-        'Solo se pueden cancelar reservas confirmadas cuya fecha de inicio aún no llega.',
+        'Solo se pueden cancelar reservas confirmadas cuya fecha de inicio aún no pasó.',
       );
     }
 
-    const { data: reservation, error: updateError } = await this.supabase
-      .from('reservas')
-      .update({ estado: 'cancelada' })
-      .eq('id', reservationId)
-      .eq('cliente_id', user.id)
-      .eq('estado', 'confirmada')
-      .select('*')
-      .maybeSingle();
-    if (updateError) {
-      throw new InternalServerErrorException({
-        statusCode: 500,
-        message: 'No se pudo cancelar la reserva.',
-        error: updateError.message,
-      });
-    }
-    if (!reservation) {
-      throw new ConflictException(
-        'La reserva cambió de estado y ya no se puede cancelar.',
-      );
-    }
+    return this.cancelWithPolicy(reservationId, 'CLIENTE', user, null);
+  }
 
-    const cancellationReference = randomUUID();
-    const reservationEntity = toReservaEntity(reservation);
-    const eventPayload = {
-      eventId: randomUUID(),
-      eventType: 'ReservaCanceladaEvent',
-      occurredAt: new Date().toISOString(),
-      data: {
-        reservaId: reservationId,
-        clienteId: user.id,
-        pagoCancelacion: {
-          estado: 'simulado',
-          referencia: cancellationReference,
-        },
+  /**
+   * Cancelación desde el panel (admin o empleado), p. ej. cuando el huésped
+   * llama por teléfono. HUESPED aplica la política de reembolso; HOTEL
+   * reembolsa el 100 % porque la cancelación es responsabilidad del hotel.
+   */
+  async cancelByStaff(
+    reservationId: string,
+    dto: StaffCancelReservaDto,
+    user: AuthenticatedUser,
+  ) {
+    return this.cancelWithPolicy(
+      reservationId,
+      dto.solicitadoPor === 'HOTEL' ? 'HOTEL' : 'ADMIN',
+      user,
+      dto.motivo,
+    );
+  }
+
+  /**
+   * Política (contrato v2.2.0): reembolso 100 % hasta 48 h antes del check-in
+   * (14:00 Guayaquil), después 0 %. La calcula cancel_alojamiento_order_v2,
+   * la misma función que usa Booking, y libera el cupo en el inventario.
+   */
+  private async cancelWithPolicy(
+    reservationId: string,
+    requestedBy: 'CLIENTE' | 'ADMIN' | 'HOTEL',
+    user: AuthenticatedUser,
+    reason: string | null,
+  ) {
+    const correlationId = randomUUID();
+    const { data: result, error } = await this.supabase.rpc(
+      'cancel_alojamiento_order_v2',
+      {
+        p_idempotency_key: randomUUID(),
+        p_request_hash: createHash('sha256')
+          .update(JSON.stringify({ reservationId, requestedBy, reason }))
+          .digest('hex'),
+        p_order_ref: reservationId,
+        p_requested_by: requestedBy,
+        p_correlation_id: correlationId,
       },
-    };
-    const { error: eventError } = await this.supabase
-      .from('eventos_log')
-      .insert({
-        tipo_evento: 'ReservaCanceladaEvent',
-        payload: eventPayload,
-      });
-
-    const warning = eventError
-      ? 'La cancelación se guardó, pero no se pudo registrar su evento.'
-      : undefined;
-    if (eventError) {
+    );
+    if (error) {
+      if (error.message.includes('ORDER_NOT_FOUND')) {
+        throw new NotFoundException('No se encontró la reserva.');
+      }
+      if (error.message.includes('INVALID_STATE_TRANSITION')) {
+        throw new ConflictException(
+          'La reserva ya tiene check-in o check-out y no se puede cancelar.',
+        );
+      }
       this.logger.error(
-        `Reserva ${reservationId} cancelada sin evento (código: ${eventError.code ?? 'desconocido'}).`,
+        `No se pudo cancelar la reserva ${reservationId} (código Supabase: ${error.code ?? 'desconocido'}).`,
+      );
+      throw new InternalServerErrorException('No se pudo cancelar la reserva.');
+    }
+    if (!isDatabaseRow(result)) {
+      throw new InternalServerErrorException(
+        'Supabase no devolvió el resultado de la cancelación.',
       );
     }
+    const alreadyCancelled = result.yaCancelada === true;
 
+    if (reason && !alreadyCancelled) {
+      const { error: reasonError } = await this.supabase
+        .from('reservas')
+        .update({ motivo_cancelacion: reason })
+        .eq('id', reservationId);
+      if (reasonError) {
+        this.logger.warn(
+          `La reserva ${reservationId} se canceló, pero no se guardó el motivo.`,
+        );
+      }
+    }
+
+    const { data: reservation } = await this.supabase
+      .from('reservas')
+      .select(
+        '*, alojamientos (id, nombre, ciudad), tipos_habitacion (codigo, nombre)',
+      )
+      .eq('id', reservationId)
+      .maybeSingle();
+
+    let warning: string | undefined;
+    if (!alreadyCancelled) {
+      const { error: eventError } = await this.supabase
+        .from('eventos_log')
+        .insert({
+          tipo_evento: 'ReservaCanceladaEvent',
+          payload: {
+            eventId: randomUUID(),
+            eventType: 'ReservaCanceladaEvent',
+            occurredAt: new Date().toISOString(),
+            correlationId,
+            data: {
+              reservaId: reservationId,
+              canceladaPor: requestedBy,
+              usuarioId: user.id,
+              rolUsuario: user.role,
+              motivo: reason,
+              porcentajeReembolso: result.porcentajeReembolso,
+              montoReembolsado: result.montoReembolsado,
+              codigoReembolso: result.codigoReembolso,
+            },
+          },
+        });
+      if (eventError) {
+        warning =
+          'La cancelación se guardó, pero no se pudo registrar su evento.';
+        this.logger.error(
+          `Reserva ${reservationId} cancelada sin evento (código: ${eventError.code ?? 'desconocido'}).`,
+        );
+      }
+    }
+
+    const refundPercent = Number(result.porcentajeReembolso ?? 0);
+    const refundAmount =
+      typeof result.montoReembolsado === 'string'
+        ? result.montoReembolsado
+        : '0.00';
+    const refundCode =
+      typeof result.codigoReembolso === 'string'
+        ? result.codigoReembolso
+        : null;
     return {
-      data: reservationEntity,
+      data: isDatabaseRow(reservation)
+        ? toReservaEntity(reservation)
+        : { id: reservationId, estado: 'cancelada' },
+      cancelacion: {
+        canceladaPor: requestedBy,
+        porcentajeReembolso: refundPercent,
+        montoReembolsado: refundAmount,
+        penalidad:
+          typeof result.penalidad === 'string' ? result.penalidad : '0.00',
+        codigoReembolso: refundCode,
+        yaCancelada: alreadyCancelled,
+      },
       pagoCancelacion: {
         estado: 'simulado',
-        referencia: cancellationReference,
+        referencia: refundCode ?? correlationId,
         simulado: true,
       },
-      message:
-        'Reserva cancelada. No se procesó una transacción ni una devolución real.',
+      message: alreadyCancelled
+        ? 'La reserva ya estaba cancelada.'
+        : refundPercent > 0
+          ? `Reserva cancelada. Reembolso simulado del ${refundPercent} % (${refundAmount} USD).`
+          : 'Reserva cancelada fuera del plazo de 48 horas: no aplica reembolso.',
       ...(warning ? { warning } : {}),
     };
   }

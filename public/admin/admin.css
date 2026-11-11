@@ -1424,3 +1424,102 @@ body.auth-pending .app-shell {
   font-size: 12px;
   cursor: pointer;
 }
+
+/* Cancelación de reservas por el personal */
+.row-actions-stack {
+  margin-top: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.cancel-note {
+  display: block;
+  margin-top: 4px;
+  color: #8a2a1f;
+  font-size: 11px;
+  line-height: 1.4;
+}
+.cancel-booking-form {
+  text-align: left;
+}
+.cancel-booking-summary {
+  color: #3f4a42;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.cancel-source {
+  margin: 14px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+  border: 0;
+}
+.cancel-source legend {
+  margin-bottom: 8px;
+  padding: 0;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+}
+.cancel-source label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid #dfe4de;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.cancel-source label:has(input:checked) {
+  border-color: var(--green, #456a52);
+  background: #f1f7f2;
+}
+.cancel-source input {
+  margin-top: 3px;
+  accent-color: var(--green, #456a52);
+}
+.cancel-source span {
+  display: grid;
+  gap: 2px;
+}
+.cancel-source strong {
+  font-size: 13px;
+}
+.cancel-source small {
+  color: #5f6a62;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.cancel-policy-result {
+  margin: 12px 0;
+  padding: 11px 13px;
+  display: grid;
+  gap: 3px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+.cancel-policy-result[data-refund='full'] {
+  border: 1px solid #b9d6bf;
+  background: #eef7f0;
+  color: #24502f;
+}
+.cancel-policy-result[data-refund='none'] {
+  border: 1px solid #efc2bd;
+  background: #fdf1ef;
+  color: #8a2a1f;
+}
+.cancel-policy-result small {
+  font-size: 12px;
+}
+.cancel-reason {
+  display: grid;
+  gap: 6px;
+}
+.cancel-reason > span {
+  font-size: 13px;
+  font-weight: 600;
+}
+.cancel-reason small {
+  color: #5f6a62;
+  font-weight: 400;
+}

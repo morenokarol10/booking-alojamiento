@@ -115,14 +115,22 @@ describe('IntegrationCatalogService property endpoints', () => {
         codigo: 'HABITACION_ESTANDAR',
         nombre: 'Habitación estándar',
         descripcion: null,
-        cantidad: 3,
+        camas: 2,
+        numero_camas: 2,
+        descripcion_camas: '2 camas matrimoniales',
+        descripcionCamas: '2 camas matrimoniales',
         capacidad_adultos: 4,
         capacidad_ninos: 0,
-        numero_camas: 2,
-        camas: '2 camas matrimoniales',
+        capacidadAdultos: 4,
+        capacidadNinos: 0,
+        capacidad: { adultos: 4, ninos: 0 },
+        cantidad: 3,
+        habitacionesTotales: 3,
         precio_noche: '85.00',
+        precioBaseNoche: '85.00',
         regimen: 'SOLO_HABITACION',
         cancelacion_gratuita_horas: 48,
+        amenidades: [],
       },
     ]);
   });
@@ -146,17 +154,18 @@ describe('IntegrationCatalogService property endpoints', () => {
       available_rooms: 2,
       price_per_night: '85.00',
       tipos: [
-        {
+        expect.objectContaining({
           id: 'room-uuid',
           codigo: 'HABITACION_ESTANDAR',
-          nombre: 'Habitación estándar',
-          capacidad_adultos: 4,
-          numero_camas: 2,
-          camas: '2 camas matrimoniales',
+          camas: 2,
+          descripcion_camas: '2 camas matrimoniales',
+          capacidadAdultos: 4,
+          capacidad: { adultos: 4, ninos: 0 },
           precio_noche: '85.00',
           total_rooms: 3,
           available_rooms: 2,
-        },
+          habitacionesDisponibles: 2,
+        }),
       ],
       noches: 2,
     });
@@ -187,9 +196,14 @@ describe('IntegrationCatalogService property endpoints', () => {
   it('exposes a readable bed description even when only the count exists', () => {
     const { service } = createService();
     expect(service.beds({ numero_camas: 2 })).toEqual({
+      camas: 2,
       numero_camas: 2,
-      camas: '2 camas',
+      descripcion_camas: '2 camas',
+      descripcionCamas: '2 camas',
     });
-    expect(service.beds({})).toEqual({ numero_camas: 1, camas: '1 cama' });
+    expect(service.beds({})).toMatchObject({
+      camas: 1,
+      descripcion_camas: '1 cama',
+    });
   });
 });

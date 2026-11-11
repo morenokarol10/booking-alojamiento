@@ -327,7 +327,7 @@ function renderDetails(listing) {
 
   function roomOptionLabel(room) {
     const guests = Number(room.capacidad_adultos);
-    return `${room.nombre} · ${room.camas} · hasta ${guests} ${guests === 1 ? 'huésped' : 'huéspedes'} · ${formatMoney(Number(room.precio_noche), listing.moneda)}/noche`;
+    return `${room.nombre} · ${room.descripcion_camas} · hasta ${guests} ${guests === 1 ? 'huésped' : 'huéspedes'} · ${formatMoney(Number(room.precio_noche), listing.moneda)}/noche`;
   }
 
   function renderRoomInfo() {
@@ -337,7 +337,7 @@ function renderDetails(listing) {
       return;
     }
     const guests = Number(room.capacidad_adultos);
-    roomInfo.innerHTML = `<strong>${escapeHtml(room.nombre)}</strong>: ${escapeHtml(room.camas)}, hasta ${guests} ${guests === 1 ? 'huésped' : 'huéspedes'} por habitación. ${escapeHtml(room.descripcion || '')}`;
+    roomInfo.innerHTML = `<strong>${escapeHtml(room.nombre)}</strong>: ${escapeHtml(room.descripcion_camas)}, hasta ${guests} ${guests === 1 ? 'huésped' : 'huéspedes'} por habitación. ${escapeHtml(room.descripcion || '')}`;
   }
 
   function renderRoomOptions() {

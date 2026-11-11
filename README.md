@@ -146,6 +146,17 @@ fallos y timeouts se registran y quedan sujetos al reintento de la Outbox.
 `X-API-Key` se envía únicamente desde el backend por HTTPS; nunca registres el
 secreto en el repositorio, cliente web ni ZIP.
 
+En Azure configura estos valores en **App Service → Environment variables**:
+`SUPABASE_URL`, `SUPABASE_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `API_KEY`,
+`STOCK_SYNC_MODE=rest`,
+`BOOKING_REST_STOCK_URL=https://booking-core-api.azurewebsites.net/api/v3/inventory/stock`
+y `BOOKING_CORE_API_URL=https://booking-core-api.azurewebsites.net`. El workflow
+no lee ni copia el `.env` local. Antes de desplegar consulta que estos App
+Settings existan y tengan valores (sin imprimirlos), que el modo sea `rest` y
+que la URL de stock corresponda al contrato. La comprobación no puede saber
+si `API_KEY` coincide con la registrada por Booking: confirma esa clave con su
+equipo por un canal seguro.
+
 Como alternativa, configura `STOCK_SYNC_MODE=rabbitmq`,
 `RABBITMQ_URL` (URI `amqps://` de CloudAMQP),
 `RABBITMQ_EXCHANGE=booking.events`, `RABBITMQ_ROUTING_KEY=stock.updated` e

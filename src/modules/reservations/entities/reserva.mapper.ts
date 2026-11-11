@@ -2,39 +2,9 @@ import { InternalServerErrorException } from '@nestjs/common';
 import type {
   EstadoPago,
   EstadoReserva,
+  EstadoUnidadHabitacion,
   ReservaEntity,
 } from './reserva.entity';
-import type { CreateReservaDto } from '../dto/create-reserva.dto';
-
-export function toReservaDatabase(
-  dto: CreateReservaDto,
-  values: {
-    clienteId: string;
-    clienteNombre: string;
-    clienteEmail: string;
-    clienteTelefono?: string;
-    precioTotal: number;
-    moneda: string;
-    pagoReferencia: string;
-  },
-): Record<string, unknown> {
-  return {
-    cliente_id: values.clienteId,
-    alojamiento_id: dto.alojamientoId,
-    cliente_nombre: values.clienteNombre,
-    cliente_email: values.clienteEmail,
-    cliente_telefono: values.clienteTelefono ?? null,
-    fecha_checkin: dto.fechaCheckin,
-    fecha_checkout: dto.fechaCheckout,
-    num_huespedes: dto.numHuespedes,
-    precio_total: values.precioTotal,
-    moneda: values.moneda,
-    metodo_pago_simulado: dto.metodoPagoSimulado,
-    pago_estado: 'exitoso',
-    pago_referencia: values.pagoReferencia,
-    estado: 'confirmada',
-  };
-}
 
 export function toReservaEntity(row: Record<string, unknown>): ReservaEntity {
   const estado = row.estado;
@@ -54,6 +24,16 @@ export function toReservaEntity(row: Record<string, unknown>): ReservaEntity {
     fechaCheckin: requireString(row.fecha_checkin, 'fecha_checkin'),
     fechaCheckout: requireString(row.fecha_checkout, 'fecha_checkout'),
     numHuespedes: requireNumber(row.num_huespedes, 'num_huespedes'),
+    cantidadHabitaciones: requireNumber(
+      row.cantidad_habitaciones ?? 1,
+      'cantidad_habitaciones',
+    ),
+    tipoHabitacionCodigo: nullableString(
+      isRecord(row.tipos_habitacion) ? row.tipos_habitacion.codigo : null,
+    ),
+    tipoHabitacionNombre: nullableString(
+      isRecord(row.tipos_habitacion) ? row.tipos_habitacion.nombre : null,
+    ),
     precioTotal: requireNumber(row.precio_total, 'precio_total'),
     moneda: requireString(row.moneda, 'moneda'),
     metodoPagoSimulado: requireString(
@@ -67,6 +47,8 @@ export function toReservaEntity(row: Record<string, unknown>): ReservaEntity {
     externalOrderId: nullableString(row.external_order_id),
     estadoIntegracion: nullableString(row.estado_integracion),
     huespedesReales: nullableNumber(row.huespedes_reales),
+    cotizacionId: nullableString(row.cotizacion_id),
+    habitacionesAsignadas: mapAssignedRooms(row.reservas_unidades_habitacion),
   };
 
   const accommodation = row.alojamientos;
@@ -80,9 +62,50 @@ export function toReservaEntity(row: Record<string, unknown>): ReservaEntity {
   return entity;
 }
 
+function mapAssignedRooms(
+  value: unknown,
+): ReservaEntity['habitacionesAsignadas'] {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) {
+    throw new InternalServerErrorException(
+      'Supabase devolvió las habitaciones asignadas con formato no válido.',
+    );
+  }
+  return value.map((assignment) => {
+    if (!isRecord(assignment) || !isRecord(assignment.unidades_habitacion)) {
+      throw new InternalServerErrorException(
+        'Supabase devolvió una habitación asignada incompleta.',
+      );
+    }
+    const unit = assignment.unidades_habitacion;
+    if (!isEstadoUnidadHabitacion(unit.estado)) {
+      throw new InternalServerErrorException(
+        'Supabase devolvió el estado de habitación no válido.',
+      );
+    }
+    return {
+      id: requireString(unit.id, 'unidades_habitacion.id'),
+      codigo: requireString(unit.codigo, 'unidades_habitacion.codigo'),
+      estado: unit.estado,
+      limpiezaHasta: nullableString(unit.limpieza_hasta),
+    };
+  });
+}
+
 function isEstadoReserva(value: unknown): value is EstadoReserva {
   return (
     value === 'pendiente' || value === 'confirmada' || value === 'cancelada'
+  );
+}
+
+function isEstadoUnidadHabitacion(
+  value: unknown,
+): value is EstadoUnidadHabitacion {
+  return (
+    value === 'DISPONIBLE' ||
+    value === 'RESERVADA' ||
+    value === 'OCUPADA' ||
+    value === 'LIMPIEZA'
   );
 }
 

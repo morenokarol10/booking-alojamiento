@@ -77,7 +77,7 @@ function formatMoney(amount, currency = 'USD') {
 async function readResponse(response) {
   const body = await response.json().catch(() => null);
   if (!response.ok) {
-    const message = body?.message;
+    const message = body?.message ?? body?.detail ?? body?.error;
     const databaseDetails =
       typeof body?.error === 'string' &&
       typeof message === 'string' &&
@@ -192,6 +192,8 @@ function isFutureMonth(value) {
 }
 
 function renderDetails(listing) {
+  const roomTypes = listing.roomTypes || [];
+  const firstRoom = roomTypes[0];
   const today = new Date();
   const localToday = new Date(
     today.getTime() - today.getTimezoneOffset() * 60000,
@@ -212,19 +214,53 @@ function renderDetails(listing) {
       <p class="detail-description">${escapeHtml(listing.politicaCancelacion || '')}</p>
       <section class="booking-box" aria-label="Formulario de reserva">
         <div class="booking-header">
-          <strong>${formatMoney(listing.precioBaseNoche, listing.moneda)} <span>/ noche</span></strong>
-          <span>Sin cargos ocultos</span>
+          <strong id="booking-total">${formatMoney(0, listing.moneda)}</strong>
+          <span>Total final, sujeto a disponibilidad</span>
         </div>
         <form class="booking-form" id="booking-form">
-          <label>Fecha de inicio
+          <label>Tipo de habitación
+            <select name="tipoHabitacionCodigo" required>
+              ${roomTypes
+                .map(
+                  (room) =>
+                    `<option value="${escapeHtml(room.codigo)}">${escapeHtml(room.nombre)} · ${Number(room.capacidad_adultos)} ${Number(room.capacidad_adultos) === 1 ? 'adulto' : 'adultos'}</option>`,
+                )
+                .join('')}
+            </select>
+          </label>
+          <label>Habitaciones
+            <input name="cantidadHabitaciones" type="number" min="1" max="10" value="1" required />
+          </label>
+          <section id="occupancy" class="occupancy full-width" aria-labelledby="occupancy-title">
+            <div class="occupancy-head">
+              <h3 id="occupancy-title">Disponibilidad por noche</h3>
+              <div class="occupancy-nav">
+                <button type="button" class="occupancy-shift" data-shift="-1" aria-label="Ver semanas anteriores">‹</button>
+                <span id="occupancy-range" aria-live="polite"></span>
+                <button type="button" class="occupancy-shift" data-shift="1" aria-label="Ver semanas siguientes">›</button>
+              </div>
+            </div>
+            <p class="occupancy-hint">Elige la noche de llegada y luego el día de salida. Las noches <strong>Completas</strong> ya están reservadas, incluidas las reservas hechas desde Booking.</p>
+            <div class="occupancy-weekdays" aria-hidden="true"><span>L</span><span>M</span><span>X</span><span>J</span><span>V</span><span>S</span><span>D</span></div>
+            <div class="occupancy-grid"></div>
+            <p id="occupancy-status" class="occupancy-status" role="status" aria-live="polite"></p>
+            <ul class="occupancy-legend" aria-label="Leyenda">
+              <li><span class="legend-swatch is-free" aria-hidden="true"></span>Disponible</li>
+              <li><span class="legend-swatch is-low" aria-hidden="true"></span>Últimas habitaciones</li>
+              <li><span class="legend-swatch is-full" aria-hidden="true"></span>Completo</li>
+              <li><span class="legend-swatch is-selected" aria-hidden="true"></span>Tu estancia</li>
+            </ul>
+          </section>
+          <label>Llegada (check-in desde 14:00)
             <input name="fechaCheckin" type="date" min="${localToday}" required />
           </label>
-          <label>Fecha de fin
+          <label>Salida (check-out hasta 11:00)
             <input name="fechaCheckout" type="date" min="${localToday}" required />
           </label>
-          <label>Número de huéspedes
-            <input name="numHuespedes" type="number" min="1" max="${Number(listing.capacidadMaxima)}" value="1" required />
+          <label class="full-width">Número de huéspedes
+            <input name="numHuespedes" type="number" min="1" max="${Number(firstRoom.capacidad_adultos)}" value="1" required />
           </label>
+          <p id="availability-message" class="availability-message full-width" data-state="info" role="status" aria-live="polite">Selecciona fechas para consultar el inventario compartido.</p>
           <section class="booking-customer full-width" aria-label="Datos de tu cuenta">
             <h3>Reserva a nombre de</h3>
             <div class="booking-user-fields">
@@ -262,8 +298,8 @@ function renderDetails(listing) {
               <label><input name="saveCard" type="checkbox" /> Guardar referencia enmascarada para futuras simulaciones</label>
             </div>
           </fieldset>
-          <div class="total-row"><span id="nights-label">Selecciona las fechas</span><strong id="booking-total">${formatMoney(0, listing.moneda)}</strong></div>
-          <button class="primary-button" type="submit">Confirmar reserva</button>
+          <div class="total-row"><span id="nights-label">Selecciona las fechas</span><strong id="booking-nights-total">${formatMoney(0, listing.moneda)}</strong></div>
+          <button class="primary-button" type="submit" disabled>Confirmar reserva</button>
         </form>
       </section>
     </div>`;
@@ -272,7 +308,192 @@ function renderDetails(listing) {
   const startInput = form.elements.fechaCheckin;
   const endInput = form.elements.fechaCheckout;
   const totalLabel = dialogContent.querySelector('#booking-total');
+  const nightsTotal = dialogContent.querySelector('#booking-nights-total');
   const nightsLabel = dialogContent.querySelector('#nights-label');
+  const availabilityMessage = dialogContent.querySelector('#availability-message');
+  const roomInput = form.elements.tipoHabitacionCodigo;
+  const roomCountInput = form.elements.cantidadHabitaciones;
+  const guestsInput = form.elements.numHuespedes;
+  const submitButton = form.querySelector('button[type="submit"]');
+  let quoteRequestNumber = 0;
+
+  function setAvailability(state, text) {
+    availabilityMessage.dataset.state = state;
+    availabilityMessage.textContent = text;
+  }
+
+  // ---- Calendario de ocupación (inventario compartido sitio + Booking) ----
+  const CALENDAR_DAYS = 28;
+  const CALENDAR_MAX_PAGE = 3;
+  const calendar = dialogContent.querySelector('#occupancy');
+  const calendarGrid = calendar.querySelector('.occupancy-grid');
+  const calendarRange = calendar.querySelector('#occupancy-range');
+  const calendarStatus = calendar.querySelector('#occupancy-status');
+  const [previousPage, nextPage] = calendar.querySelectorAll('.occupancy-shift');
+  const longDay = new Intl.DateTimeFormat('es-EC', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    timeZone: 'UTC',
+  });
+  const shortDay = new Intl.DateTimeFormat('es-EC', {
+    day: 'numeric',
+    month: 'short',
+    timeZone: 'UTC',
+  });
+  let calendarPage = 0;
+  let calendarRequest = 0;
+  let calendarNights = new Map();
+
+  const isoToDate = (iso) => new Date(`${iso}T00:00:00Z`);
+  const addDaysIso = (iso, days) => {
+    const date = isoToDate(iso);
+    date.setUTCDate(date.getUTCDate() + days);
+    return date.toISOString().slice(0, 10);
+  };
+  const calendarStart = () => addDaysIso(localToday, calendarPage * CALENDAR_DAYS);
+
+  function nightState(date) {
+    const night = calendarNights.get(date);
+    if (!night) return 'unknown';
+    const needed = Math.max(1, Number(roomCountInput.value) || 1);
+    if (night.habitaciones_disponibles < needed) return 'full';
+    if (night.habitaciones_disponibles <= 2) return 'low';
+    return 'free';
+  }
+
+  function blockedNights(start, end) {
+    const blocked = [];
+    for (let date = start; date < end; date = addDaysIso(date, 1)) {
+      if (nightState(date) === 'full') blocked.push(date);
+    }
+    return blocked;
+  }
+
+  function renderCalendar() {
+    const first = calendarStart();
+    const last = addDaysIso(first, CALENDAR_DAYS - 1);
+    calendarRange.textContent = `${shortDay.format(isoToDate(first))} – ${shortDay.format(isoToDate(last))}`;
+    previousPage.disabled = calendarPage === 0;
+    nextPage.disabled = calendarPage >= CALENDAR_MAX_PAGE;
+    const start = startInput.value;
+    const end = endInput.value;
+    const choosingCheckout = Boolean(start) && !end;
+    const leadingBlanks = (isoToDate(first).getUTCDay() + 6) % 7;
+    const cells = [];
+    for (let index = 0; index < leadingBlanks; index += 1) {
+      const blank = document.createElement('span');
+      blank.className = 'occupancy-blank';
+      blank.setAttribute('aria-hidden', 'true');
+      cells.push(blank);
+    }
+    for (let index = 0; index < CALENDAR_DAYS; index += 1) {
+      const date = addDaysIso(first, index);
+      const night = calendarNights.get(date);
+      const state = nightState(date);
+      const nightsFromStart = start ? nightsBetween(start, date) : 0;
+      const validCheckout =
+        choosingCheckout &&
+        date > start &&
+        nightsFromStart <= 30 &&
+        blockedNights(start, date).length === 0;
+      const validCheckin = state === 'free' || state === 'low';
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.dataset.date = date;
+      button.className = `occupancy-day is-${state}`;
+      if (start && end && date >= start && date < end) {
+        button.classList.add('in-stay');
+      }
+      if (date === start) button.classList.add('is-start');
+      if (date === end) button.classList.add('is-end');
+      button.setAttribute('aria-pressed', String(date === start || date === end));
+      button.disabled = !(validCheckout || validCheckin);
+      const availabilityText = !night
+        ? 'sin datos'
+        : state === 'full'
+          ? 'completo'
+          : `${night.habitaciones_disponibles} de ${night.habitaciones_totales} libres`;
+      button.setAttribute(
+        'aria-label',
+        `${longDay.format(isoToDate(date))}: ${availabilityText}${validCheckout ? '. Elegir como salida' : ''}`,
+      );
+      button.innerHTML = `<span class="day-number">${isoToDate(date).getUTCDate()}</span><span class="day-info">${
+        !night ? '–' : state === 'full' ? 'Lleno' : night.habitaciones_disponibles
+      }</span>`;
+      cells.push(button);
+    }
+    const focusedDate = calendarGrid.contains(document.activeElement)
+      ? document.activeElement.dataset.date
+      : undefined;
+    calendarGrid.replaceChildren(...cells);
+    if (focusedDate) {
+      const target = calendarGrid.querySelector(`[data-date="${focusedDate}"]`);
+      if (target && !target.disabled) target.focus();
+    }
+  }
+
+  async function loadCalendar() {
+    const request = ++calendarRequest;
+    calendar.setAttribute('aria-busy', 'true');
+    calendarStatus.textContent = 'Cargando ocupación…';
+    try {
+      const params = new URLSearchParams({
+        desde: calendarStart(),
+        dias: String(CALENDAR_DAYS),
+        tipoHabitacion: roomInput.value,
+      });
+      const response = await fetch(
+        `/api/v2/alojamientos/${encodeURIComponent(listing.codigoIntegracion)}/calendario?${params.toString()}`,
+        { cache: 'no-store' },
+      );
+      const body = await readResponse(response);
+      if (request !== calendarRequest) return;
+      for (const night of body.noches ?? []) {
+        calendarNights.set(night.fecha, night);
+      }
+      calendarStatus.textContent = '';
+    } catch {
+      if (request !== calendarRequest) return;
+      calendarStatus.textContent =
+        'No se pudo cargar la ocupación. Igual comprobaremos la disponibilidad al elegir las fechas.';
+    } finally {
+      if (request === calendarRequest) {
+        calendar.removeAttribute('aria-busy');
+        renderCalendar();
+      }
+    }
+  }
+
+  calendar.addEventListener('click', (event) => {
+    const shift = event.target.closest('.occupancy-shift');
+    if (shift) {
+      calendarPage = Math.min(
+        CALENDAR_MAX_PAGE,
+        Math.max(0, calendarPage + Number(shift.dataset.shift)),
+      );
+      void loadCalendar();
+      return;
+    }
+    const day = event.target.closest('.occupancy-day');
+    if (!day || day.disabled) return;
+    const date = day.dataset.date;
+    const start = startInput.value;
+    if (
+      start &&
+      !endInput.value &&
+      date > start &&
+      nightsBetween(start, date) <= 30 &&
+      blockedNights(start, date).length === 0
+    ) {
+      endInput.value = date;
+    } else {
+      startInput.value = date;
+      endInput.value = '';
+    }
+    void updateAvailabilityQuote();
+  });
+
   const paymentSourceInputs = form.querySelectorAll(
     'input[name="paymentSource"]',
   );
@@ -294,13 +515,11 @@ function renderDetails(listing) {
   );
   updatePaymentFields();
 
-  function updateTotal() {
+  async function updateAvailabilityQuote() {
     endInput.min = startInput.value || localToday;
     const nights = nightsBetween(startInput.value, endInput.value);
-    totalLabel.textContent = formatMoney(
-      nights * Number(listing.precioBaseNoche),
-      listing.moneda,
-    );
+    totalLabel.textContent = formatMoney(0, listing.moneda);
+    nightsTotal.textContent = formatMoney(0, listing.moneda);
     nightsLabel.textContent = nights
       ? `${nights} ${nights === 1 ? 'noche' : 'noches'}`
       : 'Selecciona las fechas';
@@ -309,11 +528,141 @@ function renderDetails(listing) {
         ? 'La fecha de fin debe ser posterior al inicio.'
         : '',
     );
+    const requestNumber = ++quoteRequestNumber;
+    form.dataset.cotizacionId = '';
+    form.dataset.quoteFingerprint = '';
+    submitButton.disabled = true;
+    renderCalendar();
+    if (startInput.value && !endInput.value) {
+      setAvailability(
+        'info',
+        `Llegada: ${formatDate(startInput.value)}. Ahora elige el día de salida.`,
+      );
+      return;
+    }
+    if (!startInput.value || !endInput.value || nights < 1 || nights > 30) {
+      setAvailability(
+        nights > 30 || (startInput.value && endInput.value) ? 'error' : 'info',
+        nights > 30
+          ? 'La estancia máxima permitida es de 30 noches.'
+          : startInput.value && endInput.value
+            ? 'La fecha de salida debe ser posterior a la de llegada.'
+            : 'Selecciona fechas para consultar el inventario compartido.',
+      );
+      return;
+    }
+    const blocked = blockedNights(startInput.value, endInput.value);
+    if (blocked.length > 0) {
+      const listed = blocked
+        .slice(0, 4)
+        .map((date) => shortDay.format(isoToDate(date)))
+        .join(', ');
+      setAvailability(
+        'error',
+        `No disponible: ${blocked.length === 1 ? 'la noche del' : 'las noches del'} ${listed}${blocked.length > 4 ? '…' : ''} ya ${blocked.length === 1 ? 'está reservada' : 'están reservadas'}. Elige otras fechas en el calendario.`,
+      );
+      return;
+    }
+
+    const quoteInput = {
+      alojamientoId: listing.codigoIntegracion,
+      tipoHabitacionCodigo: roomInput.value,
+      fechaInicio: startInput.value,
+      fechaFin: endInput.value,
+      cantidadHabitaciones: Number(roomCountInput.value),
+      ocupantes: {
+        adultos: Number(guestsInput.value),
+        ninos: 0,
+      },
+    };
+    const selectedRoomType = roomTypes.find(
+      (room) => room.codigo === quoteInput.tipoHabitacionCodigo,
+    );
+    const maxGuests =
+      Number(selectedRoomType?.capacidad_adultos ?? 0) *
+      quoteInput.cantidadHabitaciones;
+    guestsInput.max = String(maxGuests);
+    if (quoteInput.ocupantes.adultos > maxGuests) {
+      setAvailability(
+        'error',
+        `Este tipo de habitación admite hasta ${maxGuests} ${maxGuests === 1 ? 'huésped' : 'huéspedes'} con la cantidad seleccionada. Aumenta las habitaciones o reduce los huéspedes.`,
+      );
+      return;
+    }
+    const fingerprint = JSON.stringify(quoteInput);
+    setAvailability('loading', 'Consultando disponibilidad y precio actualizados…');
+    try {
+      const availabilityParams = new URLSearchParams({
+        checkin: quoteInput.fechaInicio,
+        checkout: quoteInput.fechaFin,
+        habitaciones: String(quoteInput.cantidadHabitaciones),
+        adultos: String(quoteInput.ocupantes.adultos),
+        tipoHabitacion: quoteInput.tipoHabitacionCodigo,
+      });
+      const availabilityResponse = await fetch(
+        `/api/v2/alojamientos/${encodeURIComponent(listing.codigoIntegracion)}/availability?${availabilityParams.toString()}`,
+      );
+      const availability = await readResponse(availabilityResponse);
+      const selectedRoom = availability.tipos?.find(
+        (room) => room.codigo === quoteInput.tipoHabitacionCodigo,
+      );
+      if (
+        !selectedRoom ||
+        Number(selectedRoom.available_rooms) < quoteInput.cantidadHabitaciones
+      ) {
+        throw new Error(
+          'No hay suficientes habitaciones de ese tipo para las fechas elegidas.',
+        );
+      }
+
+      const quoteResponse = await fetch('/api/v2/alojamientos/availability', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(quoteInput),
+      });
+      const quote = await readResponse(quoteResponse);
+      if (requestNumber !== quoteRequestNumber) return;
+      const quotedTotal = Number(quote.precioTotalCotizado);
+      if (
+        !quote.cotizacionId ||
+        !Number.isFinite(quotedTotal) ||
+        quotedTotal < 0
+      ) {
+        throw new Error('No se recibió una cotización válida del servidor.');
+      }
+      form.dataset.cotizacionId = quote.cotizacionId;
+      form.dataset.quoteFingerprint = fingerprint;
+      totalLabel.textContent = formatMoney(quotedTotal, quote.currency);
+      nightsTotal.textContent = formatMoney(quotedTotal, quote.currency);
+      setAvailability(
+        'success',
+        `Disponible: ${selectedRoom.nombre}, ${selectedRoom.available_rooms} ${Number(selectedRoom.available_rooms) === 1 ? 'habitación libre' : 'habitaciones libres'}. Precio garantizado hasta las ${new Date(quote.tarifaValidaHasta).toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' })}.`,
+      );
+      submitButton.disabled = false;
+    } catch (error) {
+      if (requestNumber !== quoteRequestNumber) return;
+      setAvailability(
+        'error',
+        error.message || 'No se pudo validar la disponibilidad.',
+      );
+      void loadCalendar();
+    }
   }
 
-  startInput.addEventListener('change', updateTotal);
-  endInput.addEventListener('change', updateTotal);
+  [startInput, endInput, roomCountInput, guestsInput].forEach((input) =>
+    input.addEventListener('change', updateAvailabilityQuote),
+  );
+  roomInput.addEventListener('change', () => {
+    calendarNights = new Map();
+    void loadCalendar();
+    void updateAvailabilityQuote();
+  });
+  form.addEventListener('booking-failed', () => {
+    calendarNights = new Map();
+    void loadCalendar().then(updateAvailabilityQuote);
+  });
   form.addEventListener('submit', submitBooking);
+  void loadCalendar();
 }
 
 function showToast(message) {
@@ -511,11 +860,42 @@ async function submitBooking(event) {
   const formData = new FormData(form);
   const payload = {
     alojamientoId: selectedListing.id,
+    tipoHabitacionCodigo: form.elements.tipoHabitacionCodigo.value,
+    cantidadHabitaciones: Number(form.elements.cantidadHabitaciones.value),
     fechaCheckin: formData.get('fechaCheckin').toString(),
     fechaCheckout: formData.get('fechaCheckout').toString(),
     numHuespedes: Number(formData.get('numHuespedes')),
     metodoPagoSimulado: 'tarjeta',
+    cotizacionId: form.dataset.cotizacionId,
   };
+  const quoteFingerprint = JSON.stringify({
+    alojamientoId: selectedListing.codigoIntegracion,
+    tipoHabitacionCodigo: payload.tipoHabitacionCodigo,
+    fechaInicio: payload.fechaCheckin,
+    fechaFin: payload.fechaCheckout,
+    cantidadHabitaciones: payload.cantidadHabitaciones,
+    ocupantes: { adultos: payload.numHuespedes, ninos: 0 },
+  });
+  if (
+    !payload.cotizacionId ||
+    form.dataset.quoteFingerprint !== quoteFingerprint
+  ) {
+    showToast('Consulta nuevamente disponibilidad y precio antes de confirmar.');
+    submitButton.disabled = false;
+    submitButton.textContent = originalText;
+    return;
+  }
+  const bookingControls = Array.from(
+    form.querySelectorAll('input, select'),
+  );
+  bookingControls.forEach((control) => {
+    control.disabled = true;
+  });
+  const requestFingerprint = JSON.stringify(payload);
+  if (form.dataset.idempotencyFingerprint !== requestFingerprint) {
+    form.dataset.idempotencyKey = window.crypto.randomUUID();
+    form.dataset.idempotencyFingerprint = requestFingerprint;
+  }
   const bookedAccommodation = selectedListing;
 
   try {
@@ -524,6 +904,7 @@ async function submitBooking(event) {
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${window.BookingAuth.token()}`,
+        'Idempotency-Key': form.dataset.idempotencyKey,
       },
       body: JSON.stringify(payload),
     });
@@ -565,9 +946,13 @@ async function submitBooking(event) {
     showToast(
       error.message || 'No se pudo completar la reserva. Inténtalo de nuevo.',
     );
+    form.dispatchEvent(new CustomEvent('booking-failed'));
   } finally {
     form.querySelector('#sandbox-card-number').value = '';
     form.querySelector('#sandbox-card-cvv').value = '';
+    bookingControls.forEach((control) => {
+      control.disabled = false;
+    });
     submitButton.disabled = false;
     submitButton.textContent = originalText;
   }
@@ -918,8 +1303,20 @@ async function openBookingDetails(listing) {
       profileDialog.showModal();
       return;
     }
-    selectedListing = listing;
-    renderDetails(listing);
+    if (!listing.codigoIntegracion) {
+      throw new Error(
+        'Este alojamiento aún no tiene un código de integración y no se puede reservar.',
+      );
+    }
+    const roomsResponse = await fetch(
+      `/api/v2/alojamientos/${encodeURIComponent(listing.codigoIntegracion)}/habitaciones`,
+    );
+    const roomTypes = await readResponse(roomsResponse);
+    if (!Array.isArray(roomTypes) || roomTypes.length === 0) {
+      throw new Error('Este alojamiento no tiene tipos de habitación disponibles.');
+    }
+    selectedListing = { ...listing, roomTypes };
+    renderDetails(selectedListing);
     detailDialog.showModal();
   } catch (error) {
     showToast(error.message || 'No se pudo validar tu sesión.');

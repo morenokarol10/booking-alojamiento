@@ -1,4 +1,5 @@
 import { IntegrationHealthService } from './integration-health.service';
+import { performance } from 'node:perf_hooks';
 
 describe('IntegrationHealthService', () => {
   const createService = (error: Error | null = null) => {
@@ -22,6 +23,28 @@ describe('IntegrationHealthService', () => {
       vertical: 'ALOJAMIENTOS',
       database: { status: 'CONNECTED' },
     });
+  });
+
+  it('keeps a slow but reachable database as CONNECTED', async () => {
+    const query = {
+      select: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockResolvedValue({ error: null }),
+    };
+    const service = new IntegrationHealthService({
+      from: jest.fn().mockReturnValue(query),
+    } as never);
+    const nowSpy = jest
+      .spyOn(performance, 'now')
+      .mockReturnValueOnce(0)
+      .mockReturnValueOnce(950);
+
+    await expect(service.check()).resolves.toMatchObject({
+      status: 'DEGRADED',
+      semaforo: 'RED',
+      latency_ms: 950,
+      database: { status: 'CONNECTED' },
+    });
+    nowSpy.mockRestore();
   });
 
   it('reports the node as down when the health query fails', async () => {

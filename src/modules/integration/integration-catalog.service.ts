@@ -13,6 +13,7 @@ import { SUPABASE_CLIENT } from '../../supabase/supabase.module';
 import {
   IntegrationAvailabilityDto,
   IntegrationCatalogQueryDto,
+  IntegrationOccupancyCalendarQueryDto,
   IntegrationPropertyAvailabilityQueryDto,
   IntegrationSearchDto,
 } from './integration-catalog.dto';
@@ -143,12 +144,8 @@ export class IntegrationCatalogService {
           'No se pudo consultar la disponibilidad.',
         );
       }
-      const availabilityRow = availability?.[0] as
-        | DatabaseRow
-        | undefined;
-      const available = Number(
-        availabilityRow?.habitaciones_remanentes ?? 0,
-      );
+      const availabilityRow = availability?.[0] as DatabaseRow | undefined;
+      const available = Number(availabilityRow?.habitaciones_remanentes ?? 0);
       const total = Number(
         availabilityRow?.habitaciones_totales ?? room.habitaciones_totales,
       );
@@ -236,26 +233,163 @@ export class IntegrationCatalogService {
     };
   }
 
-  private async findByIntegrationCode(id: string): Promise<DatabaseRow> {
-    const { data, error } = await this.supabase
-      .from('alojamientos')
-      .select(
-        'id,codigo_integracion,nombre,descripcion,ciudad,estrellas,precio_base_noche,moneda,capacidad_maxima,urls_imagenes,iva_porcentaje,tasa_municipal_por_noche',
-      )
-      .eq('codigo_integracion', id)
+  async occupancyCalendar(
+    id: string,
+    query: IntegrationOccupancyCalendarQueryDto,
+  ) {
+    const days = query.dias ?? 60;
+    const end = this.addDays(query.desde, days);
+    const accommodation = await this.findByIntegrationCode(id);
+    const { data: room, error: roomError } = await this.supabase
+      .from('tipos_habitacion')
+      .select('id,codigo,nombre,habitaciones_totales')
+      .eq('alojamiento_id', accommodation.id)
+      .eq('codigo', query.tipoHabitacion)
+      .eq('activo', true)
       .maybeSingle();
+    if (roomError) {
+      throw new InternalServerErrorException(
+        'No se pudo consultar el tipo de habitación.',
+      );
+    }
+    if (!room) {
+      throw new NotFoundException({
+        code: 'NOT_FOUND',
+        detail: 'No se encontró el tipo de habitación solicitado.',
+      });
+    }
+
+    const [inventoryResult, reservationsResult] = await Promise.all([
+      this.supabase
+        .from('inventario_diario')
+        .select(
+          'fecha,habitaciones_totales,habitaciones_bloqueadas,venta_cerrada',
+        )
+        .eq('tipo_habitacion_id', room.id)
+        .gte('fecha', query.desde)
+        .lt('fecha', end),
+      this.supabase
+        .from('reservas')
+        .select('fecha_checkin,fecha_checkout,cantidad_habitaciones')
+        .eq('tipo_habitacion_id', room.id)
+        .not('estado_integracion', 'in', '(CANCELLED,CHECKED_OUT)')
+        .lt('fecha_checkin', end)
+        .gt('fecha_checkout', query.desde),
+    ]);
+    if (inventoryResult.error || reservationsResult.error) {
+      throw new InternalServerErrorException(
+        'No se pudo consultar la ocupación del alojamiento.',
+      );
+    }
+    const inventoryByDate = new Map(
+      (inventoryResult.data ?? []).map((row) => [String(row.fecha), row]),
+    );
+    const reservations = reservationsResult.data ?? [];
+    const baseTotal = Number(room.habitaciones_totales);
+
+    const noches = Array.from({ length: days }, (_, index) => {
+      const fecha = this.addDays(query.desde, index);
+      const inventory = inventoryByDate.get(fecha);
+      const total =
+        inventory?.habitaciones_totales === null ||
+        inventory?.habitaciones_totales === undefined
+          ? baseTotal
+          : Number(inventory.habitaciones_totales);
+      const reserved = reservations.reduce(
+        (sum, reservation) =>
+          String(reservation.fecha_checkin) <= fecha &&
+          String(reservation.fecha_checkout) > fecha
+            ? sum + Number(reservation.cantidad_habitaciones)
+            : sum,
+        0,
+      );
+      const available =
+        inventory?.venta_cerrada === true
+          ? 0
+          : Math.max(
+              total -
+                Number(inventory?.habitaciones_bloqueadas ?? 0) -
+                reserved,
+              0,
+            );
+      return {
+        fecha,
+        habitaciones_totales: total,
+        habitaciones_reservadas: reserved,
+        habitaciones_disponibles: available,
+        venta_cerrada: inventory?.venta_cerrada === true,
+      };
+    });
+
+    return {
+      alojamientoId: String(accommodation.codigo_integracion),
+      tipoHabitacionCodigo: String(room.codigo),
+      tipoHabitacion: String(room.nombre),
+      desde: query.desde,
+      hasta: end,
+      noches,
+    };
+  }
+
+  private async findByIntegrationCode(id: string): Promise<DatabaseRow> {
+    return this.resolveAccommodation(
+      id,
+      'id,codigo_integracion,nombre,descripcion,ciudad,estrellas,precio_base_noche,moneda,capacidad_maxima,urls_imagenes,iva_porcentaje,tasa_municipal_por_noche',
+    );
+  }
+
+  /**
+   * Acepta los tres formatos con los que Booking y el sitio identifican un
+   * alojamiento: el código de integración (`HTL-QUITO-C62FE3F1`, sin importar
+   * mayúsculas), el UUID nativo de la base de datos, o un código cuyo sufijo
+   * son los primeros 8 caracteres hexadecimales del UUID.
+   */
+  async resolveAccommodation(
+    reference: string,
+    columns: string,
+  ): Promise<DatabaseRow> {
+    const raw = reference.trim();
+    const uuidPattern =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const lookup = uuidPattern.test(raw)
+      ? this.supabase
+          .from('alojamientos')
+          .select(columns)
+          .eq('id', raw.toLowerCase())
+          .maybeSingle()
+      : this.supabase
+          .from('alojamientos')
+          .select(columns)
+          .eq('codigo_integracion', raw.toUpperCase())
+          .maybeSingle();
+    const { data, error } = await lookup;
     if (error) {
       throw new InternalServerErrorException(
         'No se pudo consultar el alojamiento.',
       );
     }
-    if (!data) {
-      throw new NotFoundException({
-        code: 'NOT_FOUND',
-        detail: 'No se encontró el alojamiento solicitado.',
-      });
+    if (data) return data as unknown as DatabaseRow;
+
+    const fragment = /-([0-9a-f]{8})$/i.exec(raw)?.[1]?.toLowerCase();
+    if (fragment && !uuidPattern.test(raw)) {
+      const { data: matches, error: fragmentError } = await this.supabase
+        .from('alojamientos')
+        .select(columns)
+        .gte('id', `${fragment}-0000-0000-0000-000000000000`)
+        .lte('id', `${fragment}-ffff-ffff-ffff-ffffffffffff`)
+        .limit(2);
+      if (fragmentError) {
+        throw new InternalServerErrorException(
+          'No se pudo consultar el alojamiento.',
+        );
+      }
+      if (matches?.length === 1) return matches[0] as unknown as DatabaseRow;
     }
-    return data;
+
+    throw new NotFoundException({
+      code: 'NOT_FOUND',
+      detail: 'No se encontró el alojamiento solicitado.',
+    });
   }
 
   async list(query: IntegrationCatalogQueryDto) {
@@ -520,25 +654,10 @@ export class IntegrationCatalogService {
     planCode?: string;
   }) {
     const nights = this.nights(input.start, input.end);
-    const { data: accommodation, error: accommodationError } =
-      await this.supabase
-        .from('alojamientos')
-        .select(
-          'id,codigo_integracion,nombre,politica_cancelacion,iva_porcentaje,tasa_municipal_por_noche,permite_paquete,descuento_maximo',
-        )
-        .eq('codigo_integracion', input.accommodationCode)
-        .maybeSingle();
-    if (accommodationError) {
-      throw new InternalServerErrorException(
-        'No se pudo consultar el alojamiento.',
-      );
-    }
-    if (!accommodation) {
-      throw new NotFoundException({
-        code: 'NOT_FOUND',
-        detail: 'No se encontró el alojamiento solicitado.',
-      });
-    }
+    const accommodation = await this.resolveAccommodation(
+      input.accommodationCode,
+      'id,codigo_integracion,nombre,politica_cancelacion,iva_porcentaje,tasa_municipal_por_noche,permite_paquete,descuento_maximo',
+    );
     const { data: room, error: roomError } = await this.supabase
       .from('tipos_habitacion')
       .select(
@@ -575,7 +694,11 @@ export class IntegrationCatalogService {
         input.end,
         input.quantity,
         Number(accommodation.iva_porcentaje ?? 15),
-        String(accommodation.tasa_municipal_por_noche ?? '0.00'),
+        this.numericString(
+          accommodation.tasa_municipal_por_noche,
+          '0.00',
+          'La base de datos contiene una tasa municipal inválida.',
+        ),
       ),
     };
   }
@@ -588,25 +711,10 @@ export class IntegrationCatalogService {
         detail: 'Este nodo solo cotiza en USD.',
       });
     }
-    const { data: accommodation, error: accommodationError } =
-      await this.supabase
-        .from('alojamientos')
-        .select(
-          'id,codigo_integracion,nombre,politica_cancelacion,iva_porcentaje,tasa_municipal_por_noche',
-        )
-        .eq('codigo_integracion', dto.alojamientoId)
-        .maybeSingle();
-    if (accommodationError) {
-      throw new InternalServerErrorException(
-        'No se pudo consultar el alojamiento.',
-      );
-    }
-    if (!accommodation) {
-      throw new NotFoundException({
-        code: 'NOT_FOUND',
-        detail: 'No se encontró el alojamiento solicitado.',
-      });
-    }
+    const accommodation = await this.resolveAccommodation(
+      dto.alojamientoId,
+      'id,codigo_integracion,nombre,politica_cancelacion,iva_porcentaje,tasa_municipal_por_noche',
+    );
 
     const { data: room, error: roomError } = await this.supabase
       .from('tipos_habitacion')
@@ -703,7 +811,11 @@ export class IntegrationCatalogService {
       dto.fechaFin,
       dto.cantidadHabitaciones,
       Number(accommodation.iva_porcentaje ?? 15),
-      String(accommodation.tasa_municipal_por_noche ?? '0.00'),
+      this.numericString(
+        accommodation.tasa_municipal_por_noche,
+        '0.00',
+        'La base de datos contiene una tasa municipal inválida.',
+      ),
     );
     const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
     const { data: quote, error: quoteError } = await this.supabase

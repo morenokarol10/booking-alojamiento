@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import {
   BadGatewayException,
   BadRequestException,
@@ -17,8 +17,9 @@ import { SUPABASE_CLIENT } from '../../supabase/supabase.module';
 import { CreateReservaDto } from './dto/create-reserva.dto';
 import { CancelReservaDto } from './dto/cancel-reserva.dto';
 import type { AuthenticatedUser } from '../auth/auth.types';
-import { toReservaDatabase, toReservaEntity } from './entities/reserva.mapper';
+import { toReservaEntity } from './entities/reserva.mapper';
 import { CheckinReservaDto } from './dto/checkin-reserva.dto';
+import { CheckOutDto } from './dto/check-out.dto';
 
 @Injectable()
 export class ReservationsService {
@@ -29,7 +30,11 @@ export class ReservationsService {
     private readonly config: ConfigService,
   ) {}
 
-  async create(dto: CreateReservaDto, user: AuthenticatedUser) {
+  async create(
+    dto: CreateReservaDto,
+    user: AuthenticatedUser,
+    idempotencyKey?: string,
+  ) {
     const clienteNombre = user.fullName?.trim();
     const clienteEmail = user.email.trim();
     const clienteTelefono = user.phone?.trim();
@@ -46,124 +51,145 @@ export class ReservationsService {
       );
     }
 
-    const { data: alojamiento, error: alojamientoError } = await this.supabase
-      .from('alojamientos')
-      .select(
-        'id, precio_base_noche, moneda, capacidad_maxima, habitaciones_disponibles',
+    const requestKey = idempotencyKey ?? randomUUID();
+    if (
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        requestKey,
       )
-      .eq('id', dto.alojamientoId)
-      .maybeSingle();
-
-    if (alojamientoError) {
-      throw new InternalServerErrorException({
-        statusCode: 500,
-        message: 'No se pudo validar el alojamiento.',
-        error: alojamientoError.message,
-      });
-    }
-    if (!alojamiento) {
-      throw new NotFoundException(
-        `No existe el alojamiento ${dto.alojamientoId}.`,
-      );
-    }
-    if (dto.numHuespedes > Number(alojamiento.capacidad_maxima)) {
+    ) {
       throw new BadRequestException(
-        'El número de huéspedes supera la capacidad máxima del alojamiento.',
+        'Idempotency-Key debe ser un UUID versión 4.',
       );
     }
 
-    const precioTotal =
-      Math.round(Number(alojamiento.precio_base_noche) * nights * 100) / 100;
+    const quantity = dto.cantidadHabitaciones ?? 1;
+    const roomCode = dto.tipoHabitacionCodigo ?? 'HABITACION_ESTANDAR';
+    const requestHash = createHash('sha256')
+      .update(
+        JSON.stringify({
+          userId: user.id,
+          clienteNombre,
+          clienteEmail,
+          clienteTelefono,
+          alojamientoId: dto.alojamientoId,
+          tipoHabitacionCodigo: roomCode,
+          fechaCheckin: dto.fechaCheckin,
+          fechaCheckout: dto.fechaCheckout,
+          numHuespedes: dto.numHuespedes,
+          cantidadHabitaciones: quantity,
+          metodoPagoSimulado: dto.metodoPagoSimulado,
+          cotizacionId: dto.cotizacionId ?? null,
+        }),
+      )
+      .digest('hex');
     const pagoReferencia = randomUUID();
-
-    // Simulación local: no se contacta una pasarela ni se procesa dinero real.
-    const reservaDatabase = toReservaDatabase(dto, {
-      precioTotal,
-      moneda: String(alojamiento.moneda),
-      pagoReferencia,
-      clienteId: user.id,
-      clienteNombre,
-      clienteEmail,
-      clienteTelefono,
-    });
-    const { data: reserva, error: reservaError } = await this.supabase
-      .rpc('book_accommodation_if_available', {
-        p_alojamiento_id: reservaDatabase.alojamiento_id,
-        p_cliente_id: reservaDatabase.cliente_id,
-        p_cliente_nombre: reservaDatabase.cliente_nombre,
-        p_cliente_email: reservaDatabase.cliente_email,
-        p_cliente_telefono: reservaDatabase.cliente_telefono,
-        p_fecha_checkin: reservaDatabase.fecha_checkin,
-        p_fecha_checkout: reservaDatabase.fecha_checkout,
-        p_num_huespedes: reservaDatabase.num_huespedes,
-        p_precio_total: reservaDatabase.precio_total,
-        p_moneda: reservaDatabase.moneda,
-        p_metodo_pago_simulado: reservaDatabase.metodo_pago_simulado,
-        p_pago_referencia: reservaDatabase.pago_referencia,
-      })
-      .single();
+    const { data: result, error: reservaError } = await this.supabase.rpc(
+      'book_accommodation_room_if_available',
+      {
+        p_idempotency_key: requestKey,
+        p_request_hash: requestHash,
+        p_alojamiento_id: dto.alojamientoId,
+        p_tipo_habitacion_codigo: roomCode,
+        p_cliente_id: user.id,
+        p_cliente_nombre: clienteNombre,
+        p_cliente_email: clienteEmail,
+        p_cliente_telefono: clienteTelefono,
+        p_fecha_checkin: dto.fechaCheckin,
+        p_fecha_checkout: dto.fechaCheckout,
+        p_num_huespedes: dto.numHuespedes,
+        p_cantidad_habitaciones: quantity,
+        p_metodo_pago_simulado: dto.metodoPagoSimulado,
+        p_pago_referencia: pagoReferencia,
+        p_cotizacion_id: dto.cotizacionId ?? null,
+      },
+    );
 
     if (reservaError) {
       this.logger.error(
         `No se pudo insertar la reserva (código Supabase: ${reservaError.code ?? 'desconocido'}).`,
       );
       if (
-        reservaError.code === 'P0001' &&
-        reservaError.message === 'NO_ROOMS_AVAILABLE'
+        ['NO_ROOMS_AVAILABLE', 'OUT_OF_STOCK'].some((code) =>
+          reservaError.message.includes(code),
+        )
       ) {
         throw new ConflictException(
           'No hay habitaciones disponibles para esas fechas. Elige otras fechas o consulta otro alojamiento.',
         );
       }
-      if (
-        reservaError.code === 'P0002' &&
-        reservaError.message === 'ACCOMMODATION_NOT_FOUND'
-      ) {
+      if (reservaError.message.includes('ROOM_NOT_FOUND')) {
         throw new NotFoundException(
-          `No existe el alojamiento ${dto.alojamientoId}.`,
+          'El tipo de habitación seleccionado no está disponible.',
+        );
+      }
+      if (reservaError.message.includes('QUOTE_NOT_FOUND')) {
+        throw new NotFoundException(
+          'La cotización ya no existe. Consulta nuevamente el precio y la disponibilidad.',
         );
       }
       if (
-        reservaError.code === '22023' &&
-        reservaError.message === 'GUEST_CAPACITY_EXCEEDED'
+        reservaError.message.includes('GUEST_CAPACITY_EXCEEDED') ||
+        reservaError.message.includes('INVALID_BOOKING_DATES') ||
+        reservaError.code === '22023'
       ) {
         throw new BadRequestException(
-          'El número de huéspedes supera la capacidad máxima del alojamiento.',
+          'Revisa las fechas, la cantidad de habitaciones y la capacidad del tipo de habitación.',
+        );
+      }
+      if (reservaError.message.includes('QUOTE_EXPIRED')) {
+        throw new ConflictException(
+          'La cotización venció. Consulta nuevamente el precio y la disponibilidad.',
+        );
+      }
+      if (
+        reservaError.message.includes('PRICE_MISMATCH') ||
+        reservaError.message.includes('IDEMPOTENCY_KEY_REUSED')
+      ) {
+        throw new ConflictException(
+          'La reserva cambió desde la última cotización. Vuelve a consultar disponibilidad y precio.',
+        );
+      }
+      if (reservaError.message.includes('RESTRICTION_VIOLATED')) {
+        throw new UnprocessableEntityException(
+          'La estancia no cumple las restricciones de la tarifa seleccionada.',
         );
       }
 
       const schemaOutOfDate =
         ['PGRST202', 'PGRST204', '42703'].includes(reservaError.code ?? '') &&
-        /book_accommodation_if_available|cliente_id|metodo_pago_simulado|pago_estado/i.test(
+        /book_accommodation_room_if_available|reservas_marketplace_idempotencia|cliente_id|tipo_habitacion_id/i.test(
           reservaError.message,
         );
       throw new InternalServerErrorException({
         statusCode: 500,
         message: schemaOutOfDate
-          ? 'Supabase aún no tiene actualizado el esquema de reservas o la función de disponibilidad. Ejecuta database/migrations/20261013_atomic_booking_availability.sql en el SQL Editor de Supabase y vuelve a intentarlo.'
+          ? 'Supabase no tiene aplicada la migración de inventario compartido. Ejecuta database/migrations/202612120001_unified_marketplace_inventory.sql en el SQL Editor de Supabase y vuelve a intentarlo.'
           : 'No se pudo registrar la reserva.',
         error: reservaError.message,
       });
     }
 
-    if (!isDatabaseRow(reserva)) {
+    if (!isDatabaseRow(result) || !isDatabaseRow(result.reservation)) {
       throw new InternalServerErrorException(
         'Supabase no devolvió la reserva creada.',
       );
     }
-    const reservaEntity = toReservaEntity(reserva);
+    const reservaEntity = toReservaEntity(result.reservation);
+    const replayed = result.replayed === true;
     const eventPayload = {
       eventId: randomUUID(),
       eventType: 'ReservaRealizadaEvent',
       occurredAt: new Date().toISOString(),
       data: reservaEntity,
     };
-    const { error: eventError } = await this.supabase
-      .from('eventos_log')
-      .insert({
+    let eventError: { code?: string } | null = null;
+    if (!replayed) {
+      const { error } = await this.supabase.from('eventos_log').insert({
         tipo_evento: 'ReservaRealizadaEvent',
         payload: eventPayload,
       });
+      eventError = error;
+    }
 
     const warning = eventError
       ? 'La reserva quedó registrada, pero el evento no pudo guardarse. Contacta al soporte si no aparece en el panel.'
@@ -178,12 +204,14 @@ export class ReservationsService {
       data: reservaEntity,
       pago: {
         estado: 'exitoso',
-        referencia: pagoReferencia,
+        referencia: reservaEntity.pagoReferencia,
         simulado: true,
       },
       message: warning
         ? 'Reserva confirmada con una advertencia de registro.'
-        : 'Reserva confirmada y evento registrado correctamente.',
+        : replayed
+          ? 'La solicitud ya había sido procesada; se devolvió la reserva original.'
+          : 'Reserva confirmada y evento registrado correctamente.',
       ...(warning ? { warning } : {}),
     };
   }
@@ -293,7 +321,9 @@ export class ReservationsService {
   async findAll() {
     const { data, error } = await this.supabase
       .from('reservas')
-      .select('*, alojamientos (id, nombre, ciudad)')
+      .select(
+        '*, alojamientos (id, nombre, ciudad), tipos_habitacion (codigo, nombre), reservas_unidades_habitacion (unidades_habitacion (id, codigo, estado, limpieza_hasta))',
+      )
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -365,6 +395,17 @@ export class ReservationsService {
       });
     }
 
+    const { error: roomValidationError } = await this.supabase.rpc(
+      'validate_alojamiento_checkin_room_state',
+      { p_reservation_id: reservation.id },
+    );
+    if (roomValidationError) {
+      this.throwRoomOperationError(
+        roomValidationError,
+        'validar la habitación antes del check-in',
+      );
+    }
+
     const apiKey = this.config.get<string>('API_KEY');
     if (!apiKey) {
       throw new ServiceUnavailableException(
@@ -433,6 +474,14 @@ export class ReservationsService {
       .select('id')
       .maybeSingle();
     if (updateError || !updated) {
+      if (
+        updateError?.message.includes('ROOM_STILL_CLEANING') ||
+        updateError?.message.includes('ROOM_STILL_OCCUPIED')
+      ) {
+        throw new ConflictException(
+          'La habitación asignada todavía no está disponible.',
+        );
+      }
       this.logger.error(
         `Booking Core confirmó el check-in, pero no se pudo actualizar la orden ${externalOrderId} en Supabase.`,
       );
@@ -451,10 +500,151 @@ export class ReservationsService {
     };
   }
 
+  async checkInMarketplace(reservationId: string, dto: CheckinReservaDto) {
+    const { data: reservation, error: lookupError } = await this.supabase
+      .from('reservas')
+      .select(
+        'id,external_order_id,estado_integracion,huespedes_reales,fecha_checkin,fecha_checkout',
+      )
+      .eq('id', reservationId)
+      .maybeSingle();
+    if (lookupError) {
+      throw new InternalServerErrorException(
+        'No se pudo consultar la reserva para registrar el check-in.',
+      );
+    }
+    if (!reservation) {
+      throw new NotFoundException('No se encontró la reserva.');
+    }
+    if (reservation.external_order_id) {
+      throw new ConflictException(
+        'Las reservas de Booking deben confirmar el check-in con Booking Core.',
+      );
+    }
+    if (reservation.estado_integracion === 'CHECKED_IN') {
+      if (Number(reservation.huespedes_reales) !== dto.huespedesReales) {
+        throw new ConflictException(
+          'El check-in ya fue registrado con otro número de huéspedes.',
+        );
+      }
+      return {
+        data: { orderId: reservation.id, estado: 'CHECKED_IN' },
+        message: 'El check-in ya estaba registrado.',
+      };
+    }
+    if (reservation.estado_integracion !== 'CONFIRMED') {
+      throw new ConflictException(
+        'Solo se puede registrar el check-in de una reserva confirmada.',
+      );
+    }
+
+    const localNow = this.guayaquilDateTime();
+    if (
+      localNow.date < String(reservation.fecha_checkin) ||
+      localNow.date >= String(reservation.fecha_checkout)
+    ) {
+      throw new ConflictException(
+        'El check-in solo se puede registrar durante las fechas de la reserva.',
+      );
+    }
+    if (localNow.minutes < 14 * 60) {
+      throw new UnprocessableEntityException({
+        code: 'CHECKIN_TIME_NOT_REACHED',
+        detail:
+          'El check-in presencial se habilita a partir de las 14:00 hora de Guayaquil.',
+      });
+    }
+
+    const { data: updated, error: updateError } = await this.supabase
+      .from('reservas')
+      .update({
+        estado_integracion: 'CHECKED_IN',
+        huespedes_reales: dto.huespedesReales,
+      })
+      .eq('id', reservation.id)
+      .eq('estado_integracion', 'CONFIRMED')
+      .select('id')
+      .maybeSingle();
+    if (updateError) {
+      if (
+        updateError.message.includes('ROOM_STILL_CLEANING') ||
+        updateError.message.includes('ROOM_STILL_OCCUPIED')
+      ) {
+        throw new ConflictException(
+          'La habitación asignada todavía no está disponible.',
+        );
+      }
+      this.logger.error(
+        `No se pudo actualizar el estado de check-in de la reserva ${reservation.id} (código Supabase: ${updateError.code ?? 'desconocido'}).`,
+      );
+      throw new InternalServerErrorException(
+        'No se pudo registrar el check-in.',
+      );
+    }
+    if (!updated) {
+      throw new ConflictException(
+        'La reserva cambió de estado antes de registrar el check-in.',
+      );
+    }
+    return {
+      data: { orderId: reservation.id, estado: 'CHECKED_IN' },
+      message: 'Check-in registrado correctamente.',
+    };
+  }
+
+  async checkOut(reservationId: string, dto: CheckOutDto) {
+    const { data, error } = await this.supabase.rpc(
+      'checkout_alojamiento_order_v2',
+      {
+        p_order_ref: reservationId,
+        p_correlation_id: randomUUID(),
+        p_consumos: dto.consumosMinibar ?? [],
+        p_metodo_pago: dto.metodoPagoConsumos ?? null,
+      },
+    );
+    if (error) {
+      this.throwRoomOperationError(error, 'registrar el check-out');
+    }
+    if (!isDatabaseRow(data)) {
+      throw new InternalServerErrorException(
+        'Supabase no devolvió el resultado del check-out.',
+      );
+    }
+    return {
+      data,
+      message:
+        'Check-out registrado. La habitación pasó a limpieza y se liberará automáticamente en 60 minutos.',
+    };
+  }
+
+  async completeRoomCleaning(reservationId: string) {
+    const { data, error } = await this.supabase.rpc(
+      'complete_alojamiento_room_cleaning',
+      { p_reservation_id: reservationId },
+    );
+    if (error) {
+      this.throwRoomOperationError(error, 'marcar la habitación como limpia');
+    }
+    if (!isDatabaseRow(data)) {
+      throw new InternalServerErrorException(
+        'Supabase no devolvió el resultado de la limpieza.',
+      );
+    }
+    return {
+      data,
+      message:
+        data.yaEstabaLimpia === true
+          ? 'La habitación ya estaba limpia y disponible.'
+          : 'La habitación quedó limpia y disponible.',
+    };
+  }
+
   async findMine(user: AuthenticatedUser) {
     const { data, error } = await this.supabase
       .from('reservas')
-      .select('*, alojamientos (id, nombre, ciudad)')
+      .select(
+        '*, alojamientos (id, nombre, ciudad), tipos_habitacion (codigo, nombre)',
+      )
       .eq('cliente_id', user.id)
       .order('created_at', { ascending: false });
 
@@ -495,6 +685,36 @@ export class ReservationsService {
       date: `${values.year}-${values.month}-${values.day}`,
       minutes: Number(values.hour) * 60 + Number(values.minute),
     };
+  }
+
+  private throwRoomOperationError(
+    error: { code?: string; message: string },
+    action: string,
+  ): never {
+    if (error.message.includes('ORDER_NOT_FOUND')) {
+      throw new NotFoundException('No se encontró la reserva.');
+    }
+    if (
+      error.message.includes('INVALID_STATE_TRANSITION') ||
+      error.message.includes('ROOM_STILL_CLEANING') ||
+      error.message.includes('ROOM_STILL_OCCUPIED') ||
+      error.message.includes('ROOM_ASSIGNMENT_NOT_FOUND')
+    ) {
+      throw new ConflictException({
+        code: error.message.includes('ROOM_STILL_CLEANING')
+          ? 'ROOM_STILL_CLEANING'
+          : error.message.includes('ROOM_STILL_OCCUPIED')
+            ? 'ROOM_STILL_OCCUPIED'
+            : 'INVALID_STATE_TRANSITION',
+        detail: error.message,
+      });
+    }
+    this.logger.error(
+      `No se pudo ${action} (código Supabase: ${error.code ?? 'desconocido'}).`,
+    );
+    throw new InternalServerErrorException(
+      `No se pudo ${action}. Inténtalo nuevamente.`,
+    );
   }
 }
 

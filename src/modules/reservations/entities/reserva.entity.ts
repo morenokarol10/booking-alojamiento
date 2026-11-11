@@ -2,6 +2,8 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export type EstadoReserva = 'pendiente' | 'confirmada' | 'cancelada';
 export type EstadoPago = 'pendiente' | 'exitoso' | 'fallido';
+export type EstadoUnidadHabitacion =
+  'DISPONIBLE' | 'RESERVADA' | 'OCUPADA' | 'LIMPIEZA';
 
 export class ReservaAlojamientoEntity {
   @ApiProperty({ format: 'uuid' })
@@ -12,6 +14,22 @@ export class ReservaAlojamientoEntity {
 
   @ApiProperty()
   ciudad!: string;
+}
+
+export class ReservaUnidadHabitacionEntity {
+  @ApiProperty({ format: 'uuid' })
+  id!: string;
+
+  @ApiProperty()
+  codigo!: string;
+
+  @ApiProperty({
+    enum: ['DISPONIBLE', 'RESERVADA', 'OCUPADA', 'LIMPIEZA'],
+  })
+  estado!: EstadoUnidadHabitacion;
+
+  @ApiPropertyOptional({ format: 'date-time', nullable: true })
+  limpiezaHasta!: string | null;
 }
 
 export class ReservaEntity {
@@ -38,6 +56,15 @@ export class ReservaEntity {
 
   @ApiProperty({ example: 2 })
   numHuespedes!: number;
+
+  @ApiPropertyOptional({ example: 1, minimum: 1 })
+  cantidadHabitaciones?: number;
+
+  @ApiPropertyOptional({ nullable: true })
+  tipoHabitacionCodigo?: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  tipoHabitacionNombre?: string | null;
 
   @ApiProperty({ example: 255 })
   precioTotal!: number;
@@ -69,6 +96,12 @@ export class ReservaEntity {
   @ApiPropertyOptional({ nullable: true, minimum: 1, maximum: 20 })
   huespedesReales?: number | null;
 
+  @ApiPropertyOptional({ format: 'uuid', nullable: true })
+  cotizacionId?: string | null;
+
   @ApiPropertyOptional({ type: ReservaAlojamientoEntity })
   alojamiento?: ReservaAlojamientoEntity;
+
+  @ApiProperty({ type: [ReservaUnidadHabitacionEntity] })
+  habitacionesAsignadas!: ReservaUnidadHabitacionEntity[];
 }

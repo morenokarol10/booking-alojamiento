@@ -5,7 +5,9 @@ function createSupabase(reservation: Record<string, unknown>) {
   const lookupQuery = {
     select: jest.fn(),
     eq: jest.fn(),
-    maybeSingle: jest.fn().mockResolvedValue({ data: reservation, error: null }),
+    maybeSingle: jest
+      .fn()
+      .mockResolvedValue({ data: reservation, error: null }),
   };
   lookupQuery.select.mockReturnValue(lookupQuery);
   lookupQuery.eq.mockReturnValue(lookupQuery);
@@ -26,7 +28,13 @@ function createSupabase(reservation: Record<string, unknown>) {
     .fn()
     .mockReturnValueOnce(lookupQuery)
     .mockReturnValueOnce(updateQuery);
-  return { client: { from } as unknown as SupabaseClient, from, updateQuery };
+  const rpc = jest.fn().mockResolvedValue({ data: null, error: null });
+  return {
+    client: { from, rpc } as unknown as SupabaseClient,
+    from,
+    rpc,
+    updateQuery,
+  };
 }
 
 describe('ReservationsService in-person check-in', () => {
@@ -39,7 +47,7 @@ describe('ReservationsService in-person check-in', () => {
 
   it('sends the exact Booking Core check-in payload and persists the confirmed state', async () => {
     jest.useFakeTimers().setSystemTime(new Date('2027-01-20T19:00:00.000Z'));
-    const { client, updateQuery } = createSupabase({
+    const { client, updateQuery, rpc } = createSupabase({
       id: 'reservation-uuid',
       external_order_id: externalOrderId,
       estado_integracion: 'CONFIRMED',
@@ -50,14 +58,11 @@ describe('ReservationsService in-person check-in', () => {
     const fetch = jest
       .spyOn(globalThis, 'fetch')
       .mockResolvedValue({ ok: true, status: 200 } as Response);
-    const service = new ReservationsService(
-      client,
-      {
-        get: jest.fn((key: string) =>
-          key === 'API_KEY' ? 'server-secret' : undefined,
-        ),
-      } as never,
-    );
+    const service = new ReservationsService(client, {
+      get: jest.fn((key: string) =>
+        key === 'API_KEY' ? 'server-secret' : undefined,
+      ),
+    } as never);
 
     await expect(
       service.checkIn(externalOrderId, { huespedesReales: 2 }),
@@ -85,10 +90,41 @@ describe('ReservationsService in-person check-in', () => {
         }),
       }),
     );
+    expect(rpc).toHaveBeenCalledWith(
+      'validate_alojamiento_checkin_room_state',
+      { p_reservation_id: 'reservation-uuid' },
+    );
     expect(updateQuery.update).toHaveBeenCalledWith({
       estado_integracion: 'CHECKED_IN',
       huespedes_reales: 2,
     });
+  });
+
+  it('does not contact Booking Core while the assigned room is still being cleaned', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2027-01-20T19:00:00.000Z'));
+    const { client, rpc } = createSupabase({
+      id: 'reservation-uuid',
+      external_order_id: externalOrderId,
+      estado_integracion: 'CONFIRMED',
+      huespedes_reales: null,
+      fecha_checkin: '2027-01-20',
+      fecha_checkout: '2027-01-22',
+    });
+    rpc.mockResolvedValue({
+      data: null,
+      error: { code: 'P0001', message: 'ROOM_STILL_CLEANING' },
+    });
+    const fetch = jest.spyOn(globalThis, 'fetch');
+    const service = new ReservationsService(client, {
+      get: jest.fn((key: string) =>
+        key === 'API_KEY' ? 'server-secret' : undefined,
+      ),
+    } as never);
+
+    await expect(
+      service.checkIn(externalOrderId, { huespedesReales: 2 }),
+    ).rejects.toMatchObject({ status: 409 });
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   it('does not call Booking Core again when the same check-in is retried', async () => {
@@ -99,10 +135,9 @@ describe('ReservationsService in-person check-in', () => {
       huespedes_reales: 2,
     });
     const fetch = jest.spyOn(globalThis, 'fetch');
-    const service = new ReservationsService(
-      client,
-      { get: jest.fn() } as never,
-    );
+    const service = new ReservationsService(client, {
+      get: jest.fn(),
+    } as never);
 
     await expect(
       service.checkIn(externalOrderId, { huespedesReales: 2 }),
@@ -126,14 +161,11 @@ describe('ReservationsService in-person check-in', () => {
     jest
       .spyOn(globalThis, 'fetch')
       .mockResolvedValue({ ok: false, status: 401 } as Response);
-    const service = new ReservationsService(
-      client,
-      {
-        get: jest.fn((key: string) =>
-          key === 'API_KEY' ? 'server-secret' : undefined,
-        ),
-      } as never,
-    );
+    const service = new ReservationsService(client, {
+      get: jest.fn((key: string) =>
+        key === 'API_KEY' ? 'server-secret' : undefined,
+      ),
+    } as never);
 
     await expect(
       service.checkIn(externalOrderId, { huespedesReales: 2 }),

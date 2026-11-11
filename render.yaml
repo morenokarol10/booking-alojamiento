@@ -3,10 +3,11 @@ services:
     name: booking-alojamiento
     runtime: docker
     plan: free
+    branch: main
     dockerfilePath: ./Dockerfile
     dockerContext: .
     autoDeploy: true
-    healthCheckPath: /api/docs
+    healthCheckPath: /api/v2/alojamientos/health
     envVars:
       - key: SUPABASE_URL
         sync: false
@@ -16,3 +17,13 @@ services:
         sync: false
       - key: SUPABASE_AUTH_AUTO_CONFIRM_SIGNUPS
         value: "true"
+      - key: API_KEY
+        sync: false
+      - key: INTEGRATION_API_KEYS
+        sync: false
+      - key: STOCK_SYNC_MODE
+        value: rest
+      - key: BOOKING_REST_STOCK_URL
+        value: https://booking-core-api.azurewebsites.net/api/v3/inventory/stock
+      - key: BOOKING_CORE_API_URL
+        value: https://booking-core-api.azurewebsites.net

@@ -1,4 +1,10 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
 import { performance } from 'node:perf_hooks';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { SUPABASE_CLIENT } from '../../supabase/supabase.module';
@@ -18,24 +24,85 @@ export interface IntegrationHealthResponse {
   timestamp: string;
 }
 
+interface DatabaseProbe {
+  connected: boolean;
+  latency: number;
+  checkedAt: number;
+}
+
+/**
+ * Semáforo del contrato v2.2.0: GREEN < 200 ms · YELLOW 200–800 ms ·
+ * RED > 800 ms o caída.
+ *
+ * El Monitor de Nodos consulta cada 5 s. Si cada consulta abriera una conexión
+ * TLS nueva hacia Supabase, la latencia medida sería la del handshake (no la
+ * de la base de datos) y una respuesta lenta pero correcta se reportaría como
+ * "DISCONNECTED". Por eso un sondeo en segundo plano mantiene la conexión
+ * caliente y el endpoint responde con la última medición reciente. La base de
+ * datos solo se marca DISCONNECTED cuando realmente no responde.
+ */
 @Injectable()
-export class IntegrationHealthService {
+export class IntegrationHealthService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(IntegrationHealthService.name);
   private readonly startedAt = Date.now();
-  private readonly databaseTimeoutMs = 800;
+  private readonly databaseTimeoutMs = 3_000;
+  private readonly probeIntervalMs = 4_000;
+  private readonly probeMaxAgeMs = 10_000;
+  private lastProbe?: DatabaseProbe;
+  private inflightProbe?: Promise<DatabaseProbe>;
+  private probeTimer?: NodeJS.Timeout;
 
   constructor(
     @Inject(SUPABASE_CLIENT) private readonly supabase: SupabaseClient,
   ) {}
 
+  onModuleInit(): void {
+    void this.probe();
+    this.probeTimer = setInterval(() => {
+      void this.probe();
+    }, this.probeIntervalMs);
+    this.probeTimer.unref();
+  }
+
+  onModuleDestroy(): void {
+    if (this.probeTimer) clearInterval(this.probeTimer);
+  }
+
   async check(): Promise<IntegrationHealthResponse> {
+    const cached = this.lastProbe;
+    const probe =
+      cached && Date.now() - cached.checkedAt < this.probeMaxAgeMs
+        ? cached
+        : await this.probe();
+
+    if (!probe.connected) {
+      return this.response('DOWN', 'RED', probe.latency, 'DISCONNECTED');
+    }
+    if (probe.latency < 200) {
+      return this.response('HEALTHY', 'GREEN', probe.latency, 'CONNECTED');
+    }
+    return this.response(
+      'DEGRADED',
+      probe.latency <= 800 ? 'YELLOW' : 'RED',
+      probe.latency,
+      'CONNECTED',
+    );
+  }
+
+  private probe(): Promise<DatabaseProbe> {
+    this.inflightProbe ??= this.runProbe().finally(() => {
+      this.inflightProbe = undefined;
+    });
+    return this.inflightProbe;
+  }
+
+  private async runProbe(): Promise<DatabaseProbe> {
     const started = performance.now();
     let timer: NodeJS.Timeout | undefined;
-
     try {
       const databaseCheck = this.supabase
         .from('alojamientos')
-        .select('id', { head: true, count: 'exact' })
+        .select('id')
         .limit(1)
         .then(({ error }) => {
           if (error) throw error;
@@ -46,45 +113,33 @@ export class IntegrationHealthService {
           this.databaseTimeoutMs,
         );
       });
-
       await Promise.race([databaseCheck, timeout]);
-      const latency = this.latencySince(started);
-      const degraded = latency >= 200;
-
-      return this.response({
-        status: degraded ? 'DEGRADED' : 'HEALTHY',
-        semaforo: degraded ? 'YELLOW' : 'GREEN',
-        latency,
-        database: 'CONNECTED',
-      });
+      this.lastProbe = {
+        connected: true,
+        latency: this.latencySince(started),
+        checkedAt: Date.now(),
+      };
     } catch (error) {
-      const latency = this.latencySince(started);
       const detail =
         error instanceof Error ? error.message : 'Unknown database error.';
       this.logger.warn(`Health check failed: ${detail}`);
-
-      return this.response({
-        status: 'DOWN',
-        semaforo: 'RED',
-        latency,
-        database: 'DISCONNECTED',
-      });
+      this.lastProbe = {
+        connected: false,
+        latency: this.latencySince(started),
+        checkedAt: Date.now(),
+      };
     } finally {
       if (timer) clearTimeout(timer);
     }
+    return this.lastProbe;
   }
 
-  private response({
-    status,
-    semaforo,
-    latency,
-    database,
-  }: {
-    status: IntegrationHealthResponse['status'];
-    semaforo: IntegrationHealthResponse['semaforo'];
-    latency: number;
-    database: IntegrationHealthResponse['database']['status'];
-  }): IntegrationHealthResponse {
+  private response(
+    status: IntegrationHealthResponse['status'],
+    semaforo: IntegrationHealthResponse['semaforo'],
+    latency: number,
+    database: IntegrationHealthResponse['database']['status'],
+  ): IntegrationHealthResponse {
     return {
       status,
       semaforo,

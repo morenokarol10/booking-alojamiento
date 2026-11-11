@@ -170,10 +170,13 @@ de aplicación debe confirmarse antes de crear recursos facturables.
 
 #### Despliegue automático desde GitHub
 
-El workflow [azure-app-service.yml](./.github/workflows/azure-app-service.yml)
+El único workflow de despliegue,
+[main_alojamiento-karol-puce.yml](./.github/workflows/main_alojamiento-karol-puce.yml),
 se ejecuta en cada push a `main` y manualmente desde GitHub Actions. Ejecuta
-lint, pruebas y build, crea un ZIP Linux con dependencias de producción, lo
-publica en App Service y espera que el endpoint de health responda HTTP 200.
+lint, pruebas y build, crea un ZIP Linux con dependencias de producción,
+publica en `alojamiento-karol-puce` usando OIDC y espera que el endpoint de
+health responda HTTP 200. No mantengas otro workflow de producción para la
+misma Web App.
 Si aún no existe/configuraste la Web App en GitHub, solo ejecuta validaciones y
 omite el despliegue. Así no es necesario subir el ZIP manualmente.
 

@@ -19,6 +19,8 @@ services:
         value: "true"
       - key: API_KEY
         sync: false
+      - key: INTEGRATION_API_KEYS
+        sync: false
       - key: STOCK_SYNC_MODE
         value: rest
       - key: BOOKING_REST_STOCK_URL

@@ -274,3 +274,19 @@ export class IntegrationPropertyAvailabilityQueryDto {
   @Max(10)
   children?: number;
 }
+
+export class IntegrationOccupancyCalendarQueryDto {
+  @IsDateString({ strict: true })
+  desde!: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(120)
+  dias = 60;
+
+  @IsString()
+  @Matches(/^[A-Z0-9_]{2,40}$/)
+  tipoHabitacion!: string;
+}

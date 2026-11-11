@@ -158,6 +158,28 @@ que la URL de stock corresponda al contrato. La comprobación no puede saber
 si `API_KEY` coincide con la registrada por Booking: confirma esa clave con su
 equipo por un canal seguro.
 
+Si el Gateway de Booking llama a este nodo con una clave distinta de
+`API_KEY`, agrégala en `INTEGRATION_API_KEYS` (varias claves separadas por
+coma). Esas claves solo se aceptan en las llamadas entrantes
+(`orders/create`, `cancel`, `checkout`); `API_KEY` sigue siendo la que el
+backend envía a Booking. Una clave incorrecta responde `401 UNAUTHORIZED`.
+Esta comprobación de App Settings en el workflow solo advierte; ya no
+bloquea el despliegue.
+
+Los endpoints del catálogo v2 aceptan el alojamiento por código de
+integración (`HTL-QUITO-C62FE3F1`, sin importar mayúsculas), por UUID nativo
+o por un código cuyo sufijo son los primeros 8 caracteres del UUID.
+`GET /api/v2/alojamientos/{id}/calendario?desde=YYYY-MM-DD&dias=28&tipoHabitacion=CODIGO`
+devuelve la ocupación por noche del inventario compartido (reservas del
+sitio y de Booking). El sitio la usa para mostrar qué noches están completas
+antes de que el cliente elija fechas.
+
+El health (`GET /api/v2/alojamientos/health`) mantiene caliente la conexión
+con Supabase mediante un sondeo cada 4 s y responde con la última medición.
+Solo informa `database.status = DISCONNECTED` y HTTP 503 cuando la base de
+datos no responde en 3 s; una base lenta pero alcanzable se reporta como
+`DEGRADED` con semáforo `YELLOW` (200–800 ms) o `RED` (> 800 ms).
+
 Como alternativa, configura `STOCK_SYNC_MODE=rabbitmq`,
 `RABBITMQ_URL` (URI `amqps://` de CloudAMQP),
 `RABBITMQ_EXCHANGE=booking.events`, `RABBITMQ_ROUTING_KEY=stock.updated` e
@@ -280,9 +302,12 @@ servicio remoto esté disponible.
    [alojamientos-openapi-v2.yaml](./contracts/alojamientos-openapi-v2.yaml) describe
    **API de Alojamientos v2.2.0**. Las rutas implementadas en NestJS usan el
    prefijo `/api/v2/alojamientos`; incluyen salud, catálogo, búsqueda,
-   cotización, creación/cancelación idempotentes, feed de eventos y snapshot
-   de inventario. La operación real requiere la migración v2, credenciales
-   OAuth/API key y un canal de stock configurado. El contrato propio del producto
+   cotización, creación/cancelación idempotentes, check-out, feed de eventos y
+   snapshot de inventario. El check-out pone las habitaciones asignadas en
+   limpieza durante 60 minutos; el panel permite liberarlas antes cuando el
+   personal confirma que ya están limpias. La operación real requiere aplicar
+   las migraciones, credenciales OAuth/API key y un canal de stock configurado.
+   El contrato propio del producto
    es [booking-ec-project.openapi.yaml](./contracts/booking-ec-project.openapi.yaml);
    NestJS toma de este el título, la descripción, la versión y las etiquetas
    para Swagger, y genera las operaciones runtime desde los controladores.
@@ -628,6 +653,17 @@ evitar reservas duplicadas al reintentar. El panel administrativo lista el
 origen, las fechas, el tipo y la cantidad de habitaciones de ambas vías. Esta
 migración debe ejecutarse manualmente en el SQL Editor de Supabase con una
 cuenta autorizada; ni el workflow de Azure ni Render la aplican al desplegar.
+Después aplica
+[202612130001_harden_booking_cancellation.sql](./database/migrations/202612130001_harden_booking_cancellation.sql)
+y
+[202612140001_room_checkout_housekeeping.sql](./database/migrations/202612140001_room_checkout_housekeeping.sql),
+en ese orden. La última crea unidades físicas con códigos generados, asigna
+habitaciones a las reservas existentes y nuevas, expone los estados
+`DISPONIBLE`, `RESERVADA`, `OCUPADA` y `LIMPIEZA`, y actualiza la disponibilidad
+sin vender habitaciones que estén en limpieza. Verifica que la asignación de
+habitaciones existentes termine correctamente antes de continuar; si la
+migración detecta reservas activas que exceden las unidades físicas, se detiene
+para evitar asignaciones inconsistentes.
 Los scripts deben ejecutarse en Supabase con una cuenta autorizada.
 En Render, el despliegue del backend no ejecuta migraciones de Supabase. Para
 actualizar una base remota existente, ejecuta la migración
@@ -885,8 +921,11 @@ este nodo. La alternativa CloudAMQP requiere `STOCK_SYNC_MODE=rabbitmq`.
    huéspedes y guardar el resultado del check-in, aplica también
    `202612110001_booking_guest_sync_checkin.sql`. Finalmente, ejecuta
    `202612120001_unified_marketplace_inventory.sql` para que las reservas del
-   Marketplace y Booking bloqueen las mismas habitaciones por noche. No vuelvas
-   a ejecutar una migración que ya esté aplicada.
+   Marketplace y Booking bloqueen las mismas habitaciones por noche. Luego
+   aplica `202612130001_harden_booking_cancellation.sql` y
+   `202612140001_room_checkout_housekeeping.sql` para cerrar cancelaciones,
+   asignar unidades físicas y sincronizar check-out/limpieza. No vuelvas a
+   ejecutar una migración que ya esté aplicada.
 3. La migración v2 requiere la estructura base de `alojamientos` y `reservas`.
    Para el proyecto Supabase que se usará con Azure, el usuario confirmó que
    `202611080001_alojamientos_v2_core.sql` ya se ejecutó. Antes de integrar,

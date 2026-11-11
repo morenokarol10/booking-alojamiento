@@ -17,6 +17,7 @@ import { randomUUID } from 'node:crypto';
 import {
   IntegrationAvailabilityDto,
   IntegrationCatalogQueryDto,
+  IntegrationOccupancyCalendarQueryDto,
   IntegrationPropertyAvailabilityQueryDto,
   IntegrationSearchDto,
 } from './integration-catalog.dto';
@@ -80,6 +81,22 @@ export class IntegrationCatalogController {
   ) {
     response.setHeader('X-Correlation-ID', this.correlationId(correlationId));
     return this.integrationCatalogService.propertyAvailability(id, query);
+  }
+
+  /**
+   * Ocupación noche a noche del inventario compartido (sitio web + Booking)
+   * para que el cliente vea qué fechas están completas antes de elegirlas.
+   */
+  @Get(':id/calendario')
+  async occupancyCalendar(
+    @Param('id') id: string,
+    @Query() query: IntegrationOccupancyCalendarQueryDto,
+    @Headers('x-correlation-id') correlationId: string | undefined,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    response.setHeader('X-Correlation-ID', this.correlationId(correlationId));
+    response.setHeader('Cache-Control', 'no-store');
+    return this.integrationCatalogService.occupancyCalendar(id, query);
   }
 
   @Get(':id/disponibilidad')

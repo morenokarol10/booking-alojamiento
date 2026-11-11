@@ -55,15 +55,31 @@ export class IntegrationAuthGuard implements CanActivate {
     );
   }
 
+  /**
+   * API_KEY es la clave del nodo (también se usa para llamar a Booking).
+   * INTEGRATION_API_KEYS admite claves entrantes adicionales separadas por
+   * coma, p. ej. la registrada para este nodo en el Gateway de Booking.
+   */
+  private acceptedApiKeys(): string[] {
+    return [
+      this.config.get<string>('API_KEY') ?? '',
+      ...(this.config.get<string>('INTEGRATION_API_KEYS') ?? '').split(','),
+    ]
+      .map((key) => key.trim())
+      .filter(Boolean);
+  }
+
   private validApiKey(candidate: string): boolean {
-    const expected = this.config.get<string>('API_KEY');
-    if (!expected || !candidate) return false;
-    const suppliedBuffer = Buffer.from(candidate);
-    const expectedBuffer = Buffer.from(expected);
-    return (
-      suppliedBuffer.length === expectedBuffer.length &&
-      timingSafeEqual(suppliedBuffer, expectedBuffer)
-    );
+    const supplied = candidate.trim();
+    if (!supplied) return false;
+    const suppliedBuffer = Buffer.from(supplied);
+    return this.acceptedApiKeys().some((expected) => {
+      const expectedBuffer = Buffer.from(expected);
+      return (
+        suppliedBuffer.length === expectedBuffer.length &&
+        timingSafeEqual(suppliedBuffer, expectedBuffer)
+      );
+    });
   }
 
   private async validateToken(
@@ -131,7 +147,7 @@ export class IntegrationAuthGuard implements CanActivate {
 
   private configured(): boolean {
     return Boolean(
-      this.config.get<string>('API_KEY') ||
+      this.acceptedApiKeys().length > 0 ||
       (this.config.get<string>('OAUTH_JWKS_URL') &&
         this.config.get<string>('OAUTH_ISSUER') &&
         this.config.get<string>('OAUTH_AUDIENCE')),

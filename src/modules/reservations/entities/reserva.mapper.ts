@@ -64,6 +64,9 @@ export function toReservaEntity(row: Record<string, unknown>): ReservaEntity {
     pagoReferencia: nullableString(row.pago_referencia),
     estado,
     createdAt: requireString(row.created_at, 'created_at'),
+    externalOrderId: nullableString(row.external_order_id),
+    estadoIntegracion: nullableString(row.estado_integracion),
+    huespedesReales: nullableNumber(row.huespedes_reales),
   };
 
   const accommodation = row.alojamientos;
@@ -104,6 +107,17 @@ function nullableString(value: unknown): string | null {
     );
   }
   return value;
+}
+
+function nullableNumber(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  const numberValue = typeof value === 'number' ? value : Number(value);
+  if (!Number.isInteger(numberValue)) {
+    throw new InternalServerErrorException(
+      'Supabase devolvió un campo numérico con formato no válido.',
+    );
+  }
+  return numberValue;
 }
 
 function requireNumber(value: unknown, field: string): number {

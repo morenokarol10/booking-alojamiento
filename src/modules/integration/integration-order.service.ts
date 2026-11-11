@@ -14,6 +14,7 @@ import {
   IntegrationCancelOrderDto,
   IntegrationOrderCreateDto,
 } from './integration-order.dto';
+import { isValidGuestDocument } from './integration-document-validator';
 
 type Guest = NonNullable<IntegrationOrderCreateDto['huespedTitular']>;
 type DatabaseRow = Record<string, unknown>;
@@ -44,7 +45,7 @@ export class IntegrationOrderService {
       });
     }
     const guest = this.normalizeGuest(dto);
-    if (!this.validDocument(guest)) {
+    if (!isValidGuestDocument(guest.tipoDocumento, guest.identificacion)) {
       throw new UnprocessableEntityException({
         code: 'INVALID_DOCUMENT',
         detail: 'El documento del huésped titular no es válido.',
@@ -304,74 +305,6 @@ export class IntegrationOrderService {
       code: 'VALIDATION_FAILED',
       detail: 'Se requiere huespedTitular o customer_contact.',
     });
-  }
-
-  private validDocument(guest: Guest): boolean {
-    if (guest.tipoDocumento === 'PASAPORTE') {
-      return /^[A-Z0-9]{6,12}$/.test(guest.identificacion);
-    }
-    if (guest.tipoDocumento === 'RUC') {
-      return this.validEcuadorianRuc(guest.identificacion);
-    }
-    return this.validEcuadorianId(guest.identificacion);
-  }
-
-  private validEcuadorianRuc(value: string): boolean {
-    if (!/^[0-9]{13}$/.test(value)) return false;
-    const province = Number(value.slice(0, 2));
-    const thirdDigit = Number(value[2]);
-    if (province < 1 || province > 24) return false;
-    if (thirdDigit <= 5) {
-      return (
-        value.endsWith('001') && this.validEcuadorianId(value.slice(0, 10))
-      );
-    }
-    if (thirdDigit === 9) {
-      return (
-        value.endsWith('001') &&
-        this.validMod11(value, 9, [4, 3, 2, 7, 6, 5, 4, 3, 2])
-      );
-    }
-    if (thirdDigit === 6) {
-      return (
-        value.endsWith('0001') &&
-        this.validMod11(value, 8, [3, 2, 7, 6, 5, 4, 3, 2])
-      );
-    }
-    return false;
-  }
-
-  private validMod11(
-    value: string,
-    digits: number,
-    weights: number[],
-  ): boolean {
-    const sum = value
-      .slice(0, digits)
-      .split('')
-      .reduce(
-        (total, digit, index) => total + Number(digit) * weights[index],
-        0,
-      );
-    const check = 11 - (sum % 11);
-    return (
-      (check === 11 ? 0 : check === 10 ? -1 : check) === Number(value[digits])
-    );
-  }
-
-  private validEcuadorianId(value: string): boolean {
-    if (!/^[0-9]{10}$/.test(value)) return false;
-    const province = Number(value.slice(0, 2));
-    if (province < 1 || province > 24 || Number(value[2]) > 5) return false;
-    const sum = value
-      .slice(0, 9)
-      .split('')
-      .reduce((total, digit, index) => {
-        const number = Number(digit);
-        const weighted = index % 2 === 0 ? number * 2 : number;
-        return total + (weighted > 9 ? weighted - 9 : weighted);
-      }, 0);
-    return (10 - (sum % 10)) % 10 === Number(value[9]);
   }
 
   private validatePackage(

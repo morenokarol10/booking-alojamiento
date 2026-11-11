@@ -60,6 +60,15 @@ export class ReservaEntity {
   @ApiProperty({ format: 'date-time' })
   createdAt!: string;
 
+  @ApiPropertyOptional({ nullable: true })
+  externalOrderId?: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  estadoIntegracion?: string | null;
+
+  @ApiPropertyOptional({ nullable: true, minimum: 1, maximum: 20 })
+  huespedesReales?: number | null;
+
   @ApiPropertyOptional({ type: ReservaAlojamientoEntity })
   alojamiento?: ReservaAlojamientoEntity;
 }

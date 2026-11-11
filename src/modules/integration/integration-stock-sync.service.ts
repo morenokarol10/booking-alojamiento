@@ -25,6 +25,8 @@ type OutboxStockEvent = {
   data: StockData;
 };
 
+type StockSyncMode = 'rabbitmq' | 'rest' | 'disabled';
+
 @Injectable()
 export class IntegrationStockSyncService
   implements OnModuleInit, OnModuleDestroy
@@ -33,8 +35,10 @@ export class IntegrationStockSyncService
   private readonly serviceId: string;
   private readonly exchange: string;
   private readonly routingKey: string;
-  private readonly mode: 'rabbitmq' | 'disabled';
+  private readonly mode: StockSyncMode;
   private readonly rabbitUrl?: string;
+  private readonly bookingStockUrl?: URL;
+  private readonly bookingApiKey?: string;
   private readonly returnedMessages = new Set<string>();
   private connection?: ChannelModel;
   private channel?: ConfirmChannel;
@@ -58,23 +62,40 @@ export class IntegrationStockSyncService
       this.config.get<string>('RABBITMQ_ROUTING_KEY') ?? 'stock.updated';
     const rabbitUrl = this.config.get<string>('RABBITMQ_URL')?.trim();
     this.rabbitUrl = rabbitUrl || undefined;
-    if (this.rabbitUrl) this.validateRabbitUrl(this.rabbitUrl);
-    const mode = this.config.get<string>('EVENT_BUS_MODE') ?? 'rabbitmq';
-    if (mode !== 'rabbitmq' && mode !== 'disabled') {
-      throw new Error('EVENT_BUS_MODE must be "rabbitmq" or "disabled".');
+    const mode =
+      this.config.get<string>('STOCK_SYNC_MODE') ??
+      this.config.get<string>('EVENT_BUS_MODE') ??
+      'rabbitmq';
+    if (mode !== 'rabbitmq' && mode !== 'rest' && mode !== 'disabled') {
+      throw new Error(
+        'STOCK_SYNC_MODE must be "rest", "rabbitmq", or "disabled".',
+      );
     }
     this.mode = mode;
+    if (mode === 'rabbitmq' && this.rabbitUrl) {
+      this.validateRabbitUrl(this.rabbitUrl);
+    }
+    if (mode === 'rest') {
+      this.bookingStockUrl = this.validateBookingStockUrl(
+        this.config.get<string>('BOOKING_REST_STOCK_URL') ??
+          'https://booking-core-api.azurewebsites.net/api/v3/inventory/stock',
+      );
+      this.bookingApiKey = this.config.get<string>('API_KEY')?.trim();
+      if (!this.bookingApiKey) {
+        throw new Error('API_KEY is required when STOCK_SYNC_MODE is "rest".');
+      }
+    }
   }
 
   onModuleInit(): void {
     if (this.mode === 'disabled') {
       this.logger.warn(
-        'EVENT_BUS_MODE=disabled; stock updates will remain in the Outbox.',
+        'STOCK_SYNC_MODE=disabled; stock updates will remain in the Outbox.',
       );
       return;
     }
 
-    if (!this.rabbitUrl) {
+    if (this.mode === 'rabbitmq' && !this.rabbitUrl) {
       this.logger.warn(
         'RABBITMQ_URL is not configured; stock updates will remain in the Outbox.',
       );
@@ -107,11 +128,13 @@ export class IntegrationStockSyncService
   }
 
   private async dispatch(): Promise<void> {
-    if (this.dispatching || this.mode !== 'rabbitmq') return;
+    if (this.dispatching) return;
+    if (this.mode === 'disabled') return;
     this.dispatching = true;
     try {
-      const channel = await this.getChannel();
-      if (!channel) return;
+      const channel =
+        this.mode === 'rabbitmq' ? await this.getChannel() : undefined;
+      if (this.mode === 'rabbitmq' && !channel) return;
 
       const { data, error } = await this.supabase.rpc(
         'claim_alojamiento_stock_outbox',
@@ -125,7 +148,13 @@ export class IntegrationStockSyncService
 
       for (const row of (data ?? []) as OutboxStockEvent[]) {
         try {
-          await this.publish(channel, row);
+          if (this.mode === 'rest') {
+            await this.publishRest(row);
+          } else if (channel) {
+            await this.publish(channel, row);
+          } else {
+            throw new Error('No hay un canal de stock disponible.');
+          }
           await this.markDelivered(row.id, true);
         } catch (error) {
           await this.markDelivered(row.id, false, this.errorMessage(error));
@@ -191,6 +220,72 @@ export class IntegrationStockSyncService
       this.nextConnectionAttemptAt = Date.now() + delaySeconds * 1000;
       this.warnConnection(error);
       return undefined;
+    }
+  }
+
+  private validateBookingStockUrl(value: string): URL {
+    let url: URL;
+    try {
+      url = new URL(value);
+    } catch {
+      throw new Error('BOOKING_REST_STOCK_URL must be a valid HTTPS URL.');
+    }
+    if (
+      url.protocol !== 'https:' ||
+      !url.hostname ||
+      url.username ||
+      url.password ||
+      url.pathname !== '/api/v3/inventory/stock' ||
+      url.search ||
+      url.hash
+    ) {
+      throw new Error(
+        'BOOKING_REST_STOCK_URL must use HTTPS and the /api/v3/inventory/stock path.',
+      );
+    }
+    return url;
+  }
+
+  private async publishRest(event: OutboxStockEvent): Promise<void> {
+    const url = this.bookingStockUrl;
+    const apiKey = this.bookingApiKey;
+    if (!url || !apiKey) {
+      throw new Error(
+        'La configuración del canal REST de stock no está disponible.',
+      );
+    }
+
+    const data = event.data;
+    if (
+      !data.alojamientoId ||
+      !data.tipoHabitacionCodigo ||
+      !data.fecha ||
+      typeof data.unidadesDisponibles !== 'number' ||
+      !Number.isInteger(data.unidadesDisponibles) ||
+      data.unidadesDisponibles < 0 ||
+      !data.reason
+    ) {
+      throw new Error('El evento de stock contiene datos incompletos.');
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-Key': apiKey,
+      },
+      body: JSON.stringify({
+        item_id: `${data.alojamientoId}:${data.tipoHabitacionCodigo}`,
+        available_units: data.unidadesDisponibles,
+        date: data.fecha,
+        reason: data.reason,
+      }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!response.ok) {
+      throw new Error(
+        `Booking stock endpoint returned HTTP ${response.status}.`,
+      );
     }
   }
 

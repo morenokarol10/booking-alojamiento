@@ -219,3 +219,58 @@ export class IntegrationAvailabilityDto {
   @MaxLength(30)
   planTarifaCodigo?: string;
 }
+
+export class IntegrationPropertyAvailabilityQueryDto {
+  @IsDateString({ strict: true })
+  checkin!: string;
+
+  @IsDateString({ strict: true })
+  checkout!: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(10)
+  habitaciones?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(10)
+  rooms?: number;
+
+  @IsOptional()
+  @IsString()
+  @Matches(/^[A-Z0-9_]{2,40}$/)
+  tipoHabitacion?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(20)
+  adultos?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(20)
+  adults?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(10)
+  ninos?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(10)
+  children?: number;
+}

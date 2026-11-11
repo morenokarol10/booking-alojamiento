@@ -230,7 +230,7 @@ async function loadUsers() {
 async function loadBookings() {
   const error = document.querySelector('#booking-error');
   error.hidden = true;
-  setLoadingRow(bookingBody, 6, 'Cargando reservas…');
+  setLoadingRow(bookingBody, 7, 'Cargando reservas…');
   try {
     const result = await apiRequest('/reservas');
     const bookings = Array.isArray(result) ? result : result.data;
@@ -247,7 +247,7 @@ async function loadBookings() {
       `${bookings.length} ${bookings.length === 1 ? 'reserva' : 'reservas'} recibidas`;
 
     if (!bookings.length) {
-      setLoadingRow(bookingBody, 6, 'Todavía no se han recibido reservas.');
+      setLoadingRow(bookingBody, 7, 'Todavía no se han recibido reservas.');
       document.querySelector('#stat-revenue').textContent = formatMoney(0);
       return;
     }
@@ -272,6 +272,13 @@ async function loadBookings() {
       .map((booking) => {
         const accommodation = booking.alojamiento?.nombre || 'Alojamiento';
         const status = STATUS_LABELS[booking.estado] || booking.estado || '—';
+        const checkinCell =
+          booking.estadoIntegracion === 'CHECKED_IN'
+            ? '<span class="status-badge confirmada">Registrado</span>'
+            : booking.estadoIntegracion === 'CONFIRMED' &&
+                booking.externalOrderId
+              ? `<button class="row-action" type="button" data-action="checkin" data-order-id="${escapeHtml(booking.externalOrderId)}">Registrar llegada</button>`
+              : '—';
         return `
           <tr>
             <td><div class="guest-cell"><strong>${escapeHtml(booking.clienteNombre)}</strong><small>${escapeHtml(booking.clienteEmail)}</small></div></td>
@@ -280,6 +287,7 @@ async function loadBookings() {
             <td class="price-cell">${formatMoney(booking.precioTotal, booking.moneda)}</td>
             <td><span class="status-badge ${escapeHtml(booking.estado)}">${escapeHtml(status)}</span></td>
             <td>${formatDate(booking.createdAt)}</td>
+            <td>${checkinCell}</td>
           </tr>`;
       })
       .join('');
@@ -289,7 +297,7 @@ async function loadBookings() {
     document.querySelector('#nav-booking-count').textContent = '—';
     document.querySelector('#booking-table-count').textContent =
       'No se pudieron consultar las reservas';
-    setLoadingRow(bookingBody, 6, 'No se pudieron cargar las reservas.');
+    setLoadingRow(bookingBody, 7, 'No se pudieron cargar las reservas.');
     showSectionError('#booking-error', requestError.message);
   }
 }
@@ -578,6 +586,49 @@ document
 document
   .querySelector('#refresh-bookings')
   .addEventListener('click', loadBookings);
+bookingBody.addEventListener('click', async (event) => {
+  const button =
+    event.target instanceof Element
+      ? event.target.closest('button[data-action="checkin"]')
+      : null;
+  if (!button) return;
+
+  const externalOrderId = button.dataset.orderId;
+  if (!externalOrderId) {
+    showToast('La reserva no tiene un identificador externo.', true);
+    return;
+  }
+  const value = window.prompt(
+    '¿Cuántos huéspedes llegaron realmente?',
+    '1',
+  );
+  if (value === null) return;
+  const huespedesReales = Number(value);
+  if (
+    !Number.isInteger(huespedesReales) ||
+    huespedesReales < 1 ||
+    huespedesReales > 20
+  ) {
+    showToast('Ingresa un número entero de huéspedes entre 1 y 20.', true);
+    return;
+  }
+
+  button.disabled = true;
+  try {
+    const result = await apiRequest(
+      `/reservas/${encodeURIComponent(externalOrderId)}/checkin`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ huespedesReales }),
+      },
+    );
+    showToast(result?.message || 'Check-in presencial registrado.');
+    await loadBookings();
+  } catch (requestError) {
+    showToast(requestError.message, true);
+    button.disabled = false;
+  }
+});
 document.querySelector('#refresh-events').addEventListener('click', loadEvents);
 document.querySelector('#refresh-users').addEventListener('click', loadUsers);
 

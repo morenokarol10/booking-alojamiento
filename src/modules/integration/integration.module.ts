@@ -5,18 +5,23 @@ import { IntegrationCatalogController } from './integration-catalog.controller';
 import { IntegrationCatalogService } from './integration-catalog.service';
 import { IntegrationAuthGuard } from './integration-auth.guard';
 import { IntegrationOrderController } from './integration-order.controller';
+import { IntegrationReservationController } from './integration-reservation.controller';
 import { IntegrationOrderService } from './integration-order.service';
 import { IntegrationStockSyncService } from './integration-stock-sync.service';
 import { IntegrationFeedController } from './integration-feed.controller';
 import { IntegrationFeedService } from './integration-feed.service';
 import { IntegrationProblemFilter } from './integration-problem.filter';
+import { IntegrationCustomerController } from './integration-customer.controller';
+import { IntegrationCustomerService } from './integration-customer.service';
 
 @Module({
   controllers: [
     IntegrationHealthController,
     IntegrationCatalogController,
     IntegrationOrderController,
+    IntegrationReservationController,
     IntegrationFeedController,
+    IntegrationCustomerController,
   ],
   providers: [
     IntegrationHealthService,
@@ -26,6 +31,7 @@ import { IntegrationProblemFilter } from './integration-problem.filter';
     IntegrationStockSyncService,
     IntegrationFeedService,
     IntegrationProblemFilter,
+    IntegrationCustomerService,
   ],
   exports: [
     IntegrationHealthService,

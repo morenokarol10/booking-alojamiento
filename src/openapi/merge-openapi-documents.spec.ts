@@ -8,7 +8,7 @@ describe('mergeOpenApiDocuments', () => {
   it('combines GDS operations and all operational API routes with their servers', () => {
     const integration = load(
       readFileSync(
-        join(process.cwd(), 'contracts', 'alojamientos-openapi.yaml'),
+        join(process.cwd(), 'contracts', 'alojamientos-openapi-v2.yaml'),
         'utf8',
       ),
     ) as OpenAPIObject;
@@ -19,17 +19,14 @@ describe('mergeOpenApiDocuments', () => {
       ),
     ) as OpenAPIObject;
 
-    expect(integration.info).toHaveProperty('x-inventory-rabbitmq', {
-      provider: 'CloudAMQP',
-      exchange: 'booking.events',
-      exchangeType: 'topic',
-      routingKey: 'stock.updated',
-      connectionVariable: 'RABBITMQ_URL',
-      delivery: 'persistent',
-      publisherConfirms: true,
+    expect(integration.info).toHaveProperty('x-inventory-grpc', {
+      service: 'inventory.InventoryStockService',
+      port: 50051,
+      host: 'rda1-backend-integracion-sistemas.onrender.com',
+      note: expect.stringContaining('Host de INGESTA de Booking'),
     });
     expect(integration.info.description).toContain(
-      'Sincronización de stock — RabbitMQ',
+      'Sincronización de stock — gRPC',
     );
 
     const merged = mergeOpenApiDocuments(integration, project);

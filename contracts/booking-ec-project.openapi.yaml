@@ -4,7 +4,7 @@ info:
   version: 1.0.0
   description: >-
     Contrato de la API REST propia del proyecto académico Booking EC.
-    Es independiente del contrato GDS de integración alojamientos-openapi.yaml.
+    Es independiente del contrato GDS de integración alojamientos-openapi-v2.yaml.
 servers:
   - url: https://booking-alojamiento.onrender.com/api/v1
     description: Despliegue Render del proyecto (verificar disponibilidad)

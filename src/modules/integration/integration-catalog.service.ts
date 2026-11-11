@@ -13,6 +13,7 @@ import { SUPABASE_CLIENT } from '../../supabase/supabase.module';
 import {
   IntegrationAvailabilityDto,
   IntegrationCatalogQueryDto,
+  IntegrationPropertyAvailabilityQueryDto,
   IntegrationSearchDto,
 } from './integration-catalog.dto';
 
@@ -23,6 +24,239 @@ export class IntegrationCatalogService {
   constructor(
     @Inject(SUPABASE_CLIENT) private readonly supabase: SupabaseClient,
   ) {}
+
+  async detail(id: string) {
+    const accommodation = await this.findByIntegrationCode(id);
+    return {
+      id: String(accommodation.codigo_integracion),
+      nombre: String(accommodation.nombre),
+      descripcion:
+        typeof accommodation.descripcion === 'string'
+          ? accommodation.descripcion
+          : null,
+      destino: String(accommodation.ciudad),
+      estrellas: Number(accommodation.estrellas),
+      precioPorNoche: this.money(String(accommodation.precio_base_noche)),
+      moneda: String(accommodation.moneda),
+      capacidadAdultos: Number(accommodation.capacidad_maxima),
+      fotos: Array.isArray(accommodation.urls_imagenes)
+        ? accommodation.urls_imagenes
+        : [],
+    };
+  }
+
+  async rooms(id: string) {
+    const accommodation = await this.findByIntegrationCode(id);
+    const { data, error } = await this.supabase
+      .from('tipos_habitacion')
+      .select(
+        'id,codigo,nombre,capacidad_maxima,habitaciones_totales,precio_base_noche,regimen,activo',
+      )
+      .eq('alojamiento_id', accommodation.id)
+      .eq('activo', true)
+      .order('precio_base_noche', { ascending: true });
+    if (error) {
+      throw new InternalServerErrorException(
+        'No se pudieron consultar los tipos de habitación.',
+      );
+    }
+
+    return (data ?? []).map((room) => ({
+      codigo: String(room.codigo),
+      nombre: String(room.nombre),
+      cantidad: Number(room.habitaciones_totales),
+      capacidad_adultos: Number(room.capacidad_maxima),
+      capacidad_ninos: 0,
+      precio_noche: this.money(String(room.precio_base_noche)),
+      regimen: String(room.regimen),
+      cancelacion_gratuita_horas: 48,
+    }));
+  }
+
+  async propertyAvailability(
+    id: string,
+    query: IntegrationPropertyAvailabilityQueryDto,
+  ) {
+    const roomsRequested = query.habitaciones ?? query.rooms ?? 1;
+    const adultsRequested = query.adultos ?? query.adults ?? 2;
+    const childrenRequested = query.ninos ?? query.children ?? 0;
+    const nights = this.nights(query.checkin, query.checkout);
+    const accommodation = await this.findByIntegrationCode(id);
+    const { data: rooms, error: roomsError } = await this.supabase
+      .from('tipos_habitacion')
+      .select(
+        'id,codigo,nombre,capacidad_maxima,habitaciones_totales,precio_base_noche,regimen,activo',
+      )
+      .eq('alojamiento_id', accommodation.id)
+      .eq('activo', true)
+      .order('precio_base_noche', { ascending: true });
+    if (roomsError) {
+      throw new InternalServerErrorException(
+        'No se pudieron consultar los tipos de habitación.',
+      );
+    }
+
+    const availableTypes: Array<{
+      id: string;
+      codigo: string;
+      nombre: string;
+      precio_noche: string;
+      total_rooms: number;
+      available_rooms: number;
+    }> = [];
+    for (const room of rooms ?? []) {
+      if (query.tipoHabitacion && room.codigo !== query.tipoHabitacion) {
+        continue;
+      }
+      if (
+        Number(room.capacidad_maxima) * roomsRequested <
+        adultsRequested + childrenRequested
+      ) {
+        continue;
+      }
+
+      const { error: restrictionsError } = await this.supabase.rpc(
+        'alojamientos_v2_validar_restricciones',
+        {
+          p_tipo_habitacion_id: room.id,
+          p_fecha_inicio: query.checkin,
+          p_fecha_fin: query.checkout,
+        },
+      );
+      if (restrictionsError) {
+        if (restrictionsError.message.includes('RESTRICTION_VIOLATED')) {
+          continue;
+        }
+        throw new InternalServerErrorException(
+          'No se pudieron validar las restricciones de la habitación.',
+        );
+      }
+
+      const { data: availability, error: availabilityError } =
+        await this.supabase.rpc('alojamientos_v2_disponibilidad', {
+          p_tipo_habitacion_id: room.id,
+          p_fecha_inicio: query.checkin,
+          p_fecha_fin: query.checkout,
+        });
+      if (availabilityError) {
+        throw new InternalServerErrorException(
+          'No se pudo consultar la disponibilidad.',
+        );
+      }
+      const availabilityRow = availability?.[0] as
+        | DatabaseRow
+        | undefined;
+      const available = Number(
+        availabilityRow?.habitaciones_remanentes ?? 0,
+      );
+      const total = Number(
+        availabilityRow?.habitaciones_totales ?? room.habitaciones_totales,
+      );
+
+      const price = await this.priceBreakdown(
+        room,
+        query.checkin,
+        query.checkout,
+        1,
+        Number(accommodation.iva_porcentaje ?? 15),
+        this.numericString(
+          accommodation.tasa_municipal_por_noche,
+          '0.00',
+          'La base de datos contiene una tasa municipal inválida.',
+        ),
+      );
+      availableTypes.push({
+        id: String(room.id),
+        codigo: String(room.codigo),
+        nombre: String(room.nombre),
+        precio_noche: price.precioNoche,
+        total_rooms: total,
+        available_rooms: available,
+      });
+    }
+
+    const totalRooms = availableTypes.reduce(
+      (sum, room) => sum + room.total_rooms,
+      0,
+    );
+    const availableRooms = availableTypes.reduce(
+      (sum, room) => sum + room.available_rooms,
+      0,
+    );
+    const roomIds = availableTypes.map((room) => room.id);
+    let reservedRooms = 0;
+    if (roomIds.length > 0) {
+      const { data: reservations, error: reservationsError } =
+        await this.supabase
+          .from('reservas')
+          .select(
+            'tipo_habitacion_id,cantidad_habitaciones,fecha_checkin,fecha_checkout',
+          )
+          .in('tipo_habitacion_id', roomIds)
+          .neq('estado_integracion', 'CANCELLED')
+          .lt('fecha_checkin', query.checkout)
+          .gt('fecha_checkout', query.checkin);
+      if (reservationsError) {
+        throw new InternalServerErrorException(
+          'No se pudieron consultar las habitaciones reservadas.',
+        );
+      }
+      for (let day = 0; day < nights; day++) {
+        const date = this.addDays(query.checkin, day);
+        const reservedOnDate = (reservations ?? []).reduce(
+          (sum, reservation) =>
+            String(reservation.fecha_checkin) <= date &&
+            String(reservation.fecha_checkout) > date
+              ? sum + Number(reservation.cantidad_habitaciones)
+              : sum,
+          0,
+        );
+        reservedRooms = Math.max(reservedRooms, reservedOnDate);
+      }
+    }
+    const pricePerNight = availableTypes.reduce<string | null>(
+      (lowest, room) =>
+        lowest === null ||
+        this.toCents(room.precio_noche) < this.toCents(lowest)
+          ? room.precio_noche
+          : lowest,
+      null,
+    );
+
+    return {
+      alojamientoId: String(accommodation.codigo_integracion),
+      checkin: query.checkin,
+      checkout: query.checkout,
+      total_rooms: totalRooms,
+      reserved_rooms: reservedRooms,
+      available_rooms: availableRooms,
+      price_per_night: pricePerNight ?? '0.00',
+      tipos: availableTypes,
+      noches: nights,
+    };
+  }
+
+  private async findByIntegrationCode(id: string): Promise<DatabaseRow> {
+    const { data, error } = await this.supabase
+      .from('alojamientos')
+      .select(
+        'id,codigo_integracion,nombre,descripcion,ciudad,estrellas,precio_base_noche,moneda,capacidad_maxima,urls_imagenes,iva_porcentaje,tasa_municipal_por_noche',
+      )
+      .eq('codigo_integracion', id)
+      .maybeSingle();
+    if (error) {
+      throw new InternalServerErrorException(
+        'No se pudo consultar el alojamiento.',
+      );
+    }
+    if (!data) {
+      throw new NotFoundException({
+        code: 'NOT_FOUND',
+        detail: 'No se encontró el alojamiento solicitado.',
+      });
+    }
+    return data;
+  }
 
   async list(query: IntegrationCatalogQueryDto) {
     let request = this.supabase

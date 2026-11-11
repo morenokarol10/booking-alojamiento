@@ -1,5 +1,6 @@
 import {
   Body,
+  ConflictException,
   Controller,
   Get,
   Param,
@@ -25,6 +26,7 @@ import {
 } from '@nestjs/swagger';
 import { CreateReservaDto } from './dto/create-reserva.dto';
 import { CancelReservaDto } from './dto/cancel-reserva.dto';
+import { CheckinReservaDto } from './dto/checkin-reserva.dto';
 import {
   CancelReservaResponseDto,
   ReservaResponseDto,
@@ -116,6 +118,33 @@ export class ReservationsController {
   @ApiResponse({ status: 500, description: 'Error al consultar Supabase.' })
   findAll() {
     return this.reservationsService.findAll();
+  }
+
+  @Post(':externalOrderId/checkin')
+  @UseGuards(SupabaseAuthGuard, RolesGuard)
+  @Roles('admin')
+  @ApiBearerAuth('supabase-jwt')
+  @ApiUnauthorizedResponse({ description: 'Token ausente o no válido.' })
+  @ApiForbiddenResponse({ description: 'Se requiere rol admin.' })
+  @ApiOperation({
+    summary: 'Registrar llegada presencial con Booking Core',
+  })
+  @ApiOkResponse({
+    description: 'Check-in presencial confirmado por Booking Core.',
+  })
+  @ApiConflictResponse({
+    description: 'La reserva no admite check-in o ya tiene otro registro.',
+  })
+  checkIn(
+    @Param('externalOrderId') externalOrderId: string,
+    @Body() dto: CheckinReservaDto,
+  ) {
+    if (!/^ORD-HTL-[A-Z0-9]{3,20}$/.test(externalOrderId)) {
+      throw new ConflictException(
+        'El identificador externo de la reserva no tiene un formato válido.',
+      );
+    }
+    return this.reservationsService.checkIn(externalOrderId, dto);
   }
 
   @Get('mis-reservas')

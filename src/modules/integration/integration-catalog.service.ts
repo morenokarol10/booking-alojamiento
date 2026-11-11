@@ -62,19 +62,7 @@ export class IntegrationCatalogService {
       );
     }
 
-    return (data ?? []).map((room) => ({
-      codigo: String(room.codigo),
-      nombre: String(room.nombre),
-      descripcion:
-        typeof room.descripcion === 'string' ? room.descripcion : null,
-      cantidad: Number(room.habitaciones_totales),
-      capacidad_adultos: Number(room.capacidad_maxima),
-      capacidad_ninos: 0,
-      ...this.beds(room),
-      precio_noche: this.money(String(room.precio_base_noche)),
-      regimen: String(room.regimen),
-      cancelacion_gratuita_horas: 48,
-    }));
+    return (data ?? []).map((room) => this.roomTypePayload(room));
   }
 
   async propertyAvailability(
@@ -101,17 +89,15 @@ export class IntegrationCatalogService {
       );
     }
 
-    const availableTypes: Array<{
-      id: string;
-      codigo: string;
-      nombre: string;
-      capacidad_adultos: number;
-      numero_camas: number;
-      camas: string;
-      precio_noche: string;
-      total_rooms: number;
-      available_rooms: number;
-    }> = [];
+    const availableTypes: Array<
+      ReturnType<IntegrationCatalogService['roomTypePayload']> & {
+        id: string;
+        precio_noche: string;
+        total_rooms: number;
+        available_rooms: number;
+        habitacionesDisponibles: number;
+      }
+    > = [];
     for (const room of rooms ?? []) {
       if (query.tipoHabitacion && room.codigo !== query.tipoHabitacion) {
         continue;
@@ -176,14 +162,12 @@ export class IntegrationCatalogService {
         ),
       );
       availableTypes.push({
+        ...this.roomTypePayload(room),
         id: String(room.id),
-        codigo: String(room.codigo),
-        nombre: String(room.nombre),
-        capacidad_adultos: Number(room.capacidad_maxima),
-        ...this.beds(room),
         precio_noche: price.precioNoche,
         total_rooms: total,
         available_rooms: available,
+        habitacionesDisponibles: available,
       });
     }
 
@@ -1038,15 +1022,54 @@ export class IntegrationCatalogService {
   }
 
   /** Camas del tipo de habitación (contrato: `camas` texto; `numero_camas` aditivo). */
-  beds(room: DatabaseRow): { numero_camas: number; camas: string } {
+  beds(room: DatabaseRow): {
+    camas: number;
+    numero_camas: number;
+    descripcion_camas: string;
+    descripcionCamas: string;
+  } {
     const count = Number(room.numero_camas);
     const numero = Number.isInteger(count) && count > 0 ? count : 1;
+    const description =
+      typeof room.camas === 'string' && room.camas.trim()
+        ? room.camas.trim()
+        : `${numero} ${numero === 1 ? 'cama' : 'camas'}`;
     return {
+      camas: numero,
       numero_camas: numero,
-      camas:
-        typeof room.camas === 'string' && room.camas.trim()
-          ? room.camas
-          : `${numero} ${numero === 1 ? 'cama' : 'camas'}`,
+      descripcion_camas: description,
+      descripcionCamas: description,
+    };
+  }
+
+  /**
+   * Tipo de habitación con los nombres que usa Booking (snake_case de su
+   * catálogo: capacidad_adultos, camas numérico, descripcion_camas,
+   * precio_noche, cantidad…) y los del contrato v2.2.0 (capacidadAdultos,
+   * precioBaseNoche, habitacionesTotales…).
+   */
+  roomTypePayload(room: DatabaseRow) {
+    const adults = Number(room.capacidad_maxima);
+    const total = Number(room.habitaciones_totales);
+    const price = this.money(String(room.precio_base_noche));
+    return {
+      codigo: String(room.codigo),
+      nombre: String(room.nombre),
+      descripcion:
+        typeof room.descripcion === 'string' ? room.descripcion : null,
+      ...this.beds(room),
+      capacidad_adultos: adults,
+      capacidad_ninos: 0,
+      capacidadAdultos: adults,
+      capacidadNinos: 0,
+      capacidad: { adultos: adults, ninos: 0 },
+      cantidad: total,
+      habitacionesTotales: total,
+      precio_noche: price,
+      precioBaseNoche: price,
+      regimen: String(room.regimen),
+      cancelacion_gratuita_horas: 48,
+      amenidades: [] as string[],
     };
   }
 

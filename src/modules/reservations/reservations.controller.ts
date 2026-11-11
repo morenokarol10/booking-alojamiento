@@ -3,6 +3,7 @@ import {
   ConflictException,
   Controller,
   Get,
+  Headers,
   Param,
   ParseUUIDPipe,
   Post,
@@ -16,6 +17,7 @@ import {
   ApiCreatedResponse,
   ApiConflictResponse,
   ApiForbiddenResponse,
+  ApiHeader,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
@@ -50,6 +52,12 @@ export class ReservationsController {
   @ApiUnauthorizedResponse({ description: 'Token ausente o no válido.' })
   @ApiForbiddenResponse({ description: 'Se requiere rol cliente.' })
   @ApiOperation({ summary: 'Crear una reserva para el cliente autenticado' })
+  @ApiHeader({
+    name: 'Idempotency-Key',
+    required: false,
+    description:
+      'UUID v4 para devolver la misma reserva si el cliente reintenta la solicitud.',
+  })
   @ApiCreatedResponse({
     description:
       'Reserva creada. Si falla la bitácora de eventos, se responde con una advertencia sin ocultar que la reserva quedó guardada.',
@@ -64,11 +72,15 @@ export class ReservationsController {
   })
   @ApiNotFoundResponse({ description: 'Alojamiento no encontrado.' })
   @ApiResponse({ status: 500, description: 'Error al crear la reserva.' })
-  create(@Body() dto: CreateReservaDto, @Req() request: AuthenticatedRequest) {
+  create(
+    @Body() dto: CreateReservaDto,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ) {
     if (!request.user) {
       throw new UnauthorizedException('La sesión no está autenticada.');
     }
-    return this.reservationsService.create(dto, request.user);
+    return this.reservationsService.create(dto, request.user, idempotencyKey);
   }
 
   @Post(':id/cancelar')

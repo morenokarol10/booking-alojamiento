@@ -87,6 +87,7 @@ export function toAlojamientoEntity(
   return {
     id: requireString(row.id, 'id'),
     proveedorId: requireString(row.proveedor_id, 'proveedor_id'),
+    codigoIntegracion: nullableString(row.codigo_integracion),
     nombre: requireString(row.nombre, 'nombre'),
     descripcion: nullableString(row.descripcion),
     tipo,

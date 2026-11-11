@@ -105,6 +105,7 @@ describe('alojamiento mapper', () => {
     const entity = toAlojamientoEntity({
       id: '10000000-0000-4000-8000-000000000001',
       proveedor_id: '20000000-0000-4000-8000-000000000001',
+      codigo_integracion: 'HTL-QUITO-001',
       nombre: 'Suite Quito',
       descripcion: null,
       tipo: 'hotel',
@@ -124,6 +125,7 @@ describe('alojamiento mapper', () => {
 
     expect(entity).toMatchObject({
       proveedorId: '20000000-0000-4000-8000-000000000001',
+      codigoIntegracion: 'HTL-QUITO-001',
       nombre: 'Suite Quito',
       precioBaseNoche: 85,
       capacidadMaxima: 4,

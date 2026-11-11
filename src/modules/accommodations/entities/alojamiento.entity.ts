@@ -16,6 +16,9 @@ export class AlojamientoEntity {
   @ApiProperty({ format: 'uuid' })
   proveedorId!: string;
 
+  @ApiPropertyOptional({ nullable: true, example: 'HTL-QUITO-001' })
+  codigoIntegracion!: string | null;
+
   @ApiProperty({ example: 'Suite Familiar Quito' })
   nombre!: string;
 

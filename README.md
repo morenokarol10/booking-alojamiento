@@ -31,9 +31,10 @@ actualizaciones de stock con Booking por REST o, como alternativa, RabbitMQ.
 | Backend | NestJS modular, API REST y validación de DTOs |
 | Interfaz | Marketplace, login/registro y panel estáticos servidos por NestJS |
 | Datos y autenticación | PostgreSQL en Supabase y Supabase Auth; operación en producción no verificada |
-| Plataforma configurada | Render Web Service basado en Docker, descrito en [render.yaml](./render.yaml); despliegue Azure en preparación |
+| Plataforma configurada | Render Web Service y workflow de despliegue a Azure App Service; publicación operativa pendiente de verificar |
 | Marketplace público | [booking-alojamiento.onrender.com/marketplace/](https://booking-alojamiento.onrender.com/marketplace/) — no verificado |
 | Panel de administración | [booking-alojamiento.onrender.com/admin/](https://booking-alojamiento.onrender.com/admin/) — no verificado |
+| Azure App Service | [alojamiento-karol-puce-c7dcf7f9fhcncrak](https://alojamiento-karol-puce-c7dcf7f9fhcncrak.spaincentral-01.azurewebsites.net/) — no verificado |
 | Swagger integrado | [booking-alojamiento.onrender.com/api/docs](https://booking-alojamiento.onrender.com/api/docs) |
 | Swagger de controladores NestJS | [booking-alojamiento.onrender.com/api/project-docs](https://booking-alojamiento.onrender.com/api/project-docs) |
 | Verificación más reciente | Timeout HTTP al 2026-11-04; resultado anterior 503 al 2026-10-07 |
@@ -108,7 +109,7 @@ describen el contrato como Vertical Atracciones. El líder técnico debe
 confirmar host/SNI y acordar el uso hotelero de `item_id`, `time_slot` y
 `slot_id` antes de configurar la conexión de producción.
 
-### Preparación de despliegue en Azure App Service
+### Despliegue en Azure App Service
 
 La aplicación escucha en `process.env.PORT` o en `8080`, enlazada a
 `0.0.0.0`. El contenedor también declara el puerto `8080`; en Render se respeta
@@ -174,10 +175,10 @@ Supabase y al canal de stock seleccionado. Si falta la configuración de ese
 canal o Booking rechaza una actualización, los eventos quedan en la Outbox y
 se informa en los logs.
 
-El inicio de sesión de Azure CLI y la suscripción `Azure for Students` están
-disponibles en el entorno de desarrollo, pero no se ha creado ni desplegado
-ningún recurso. La disponibilidad de SKU, región, cuota, permisos y nombres
-de aplicación debe confirmarse antes de crear recursos facturables.
+El dominio de App Service confirmado por la usuaria es
+`alojamiento-karol-puce-c7dcf7f9fhcncrak.spaincentral-01.azurewebsites.net`;
+esta configuración no demuestra que la versión actual ya esté desplegada ni
+saludable.
 
 #### Despliegue automático desde GitHub
 
@@ -185,9 +186,10 @@ El único workflow de despliegue,
 [main_alojamiento-karol-puce.yml](./.github/workflows/main_alojamiento-karol-puce.yml),
 se ejecuta en cada push a `main` y manualmente desde GitHub Actions. Ejecuta
 lint, pruebas y build, crea un ZIP Linux con dependencias de producción,
-publica en `alojamiento-karol-puce` usando OIDC y espera que el endpoint de
-health responda HTTP 200. No mantengas otro workflow de producción para la
-misma Web App.
+resuelve el nombre real de la Web App a partir de ese hostname, publica usando
+OIDC y espera que
+`/api/v2/alojamientos/health` responda HTTP 200 en el dominio de App Service.
+Solo un workflow debe desplegar en esta Web App.
 
 ##### Smoke E2E contra Azure
 
@@ -198,7 +200,7 @@ inventario. El runner no lee `.env`; pasa las variables explícitamente en la
 terminal. Usa una propiedad y fechas para las que se haya cargado inventario:
 
 ```powershell
-$env:E2E_BASE_URL = 'https://alojamiento-karol-puce.azurewebsites.net/api/v2'
+$env:E2E_BASE_URL = 'https://alojamiento-karol-puce-c7dcf7f9fhcncrak.spaincentral-01.azurewebsites.net/api/v2'
 $env:E2E_ALOJAMIENTO_ID = 'HTL-...'
 $env:E2E_CHECKIN = 'YYYY-MM-DD'
 $env:E2E_CHECKOUT = 'YYYY-MM-DD'
@@ -241,17 +243,16 @@ Booking que su inventario refleje el cambio.
 Si aún no existe/configuraste la Web App en GitHub, solo ejecuta validaciones y
 omite el despliegue. Así no es necesario subir el ZIP manualmente.
 
-En GitHub, abre **Settings → Secrets and variables → Actions** y configura:
-
-- Repository variable `AZURE_WEBAPP_NAME`: nombre exacto de la Web App.
-- Repository secret `AZURE_WEBAPP_PUBLISH_PROFILE`: contenido completo del
-  perfil de publicación descargado desde Azure Portal → Web App → **Get publish
-  profile**. Es una credencial de despliegue; rótala si se expone.
-
-Configura en Azure Node 22 LTS, startup command `node dist/main.js`, Always On y
-las variables de aplicación listadas arriba. Después sube los cambios a `main`
-y revisa el resultado en GitHub → **Actions**. Los secretos de runtime deben
-guardarse en Azure, no como variables de CI.
+El workflow solo se ejecuta en `main` (o por ejecución manual desde Actions).
+Los cambios en una rama feature no actualizan Azure ni Render hasta integrar
+esa rama en `main`; Render debe estar conectado a esa rama y tener Auto-Deploy
+habilitado. GitHub Actions usa los secretos OIDC
+`AZUREAPPSERVICE_CLIENTID_FE0433D692DA4EB29A90AD41E6CE0A6D`,
+`AZUREAPPSERVICE_TENANTID_DFBF4A5E8E1C429E866B4CC8EE30EB9F` y
+`AZUREAPPSERVICE_SUBSCRIPTIONID_31412793ED3E4C36845BFA946CF1DDD5`.
+Configura la federación OIDC de Azure para el repositorio y rama `main`.
+Los secretos de ejecución (`SUPABASE_*`, `API_KEY`) se guardan en la
+configuración de cada plataforma, nunca en GitHub Actions ni en el repositorio.
 
 ## 2. Matriz de cumplimiento de la rúbrica
 
@@ -618,6 +619,15 @@ La migración
 [202612100001_create_favoritos.sql](./database/migrations/202612100001_create_favoritos.sql)
 crea el almacenamiento de favoritos por usuario autenticado; ejecútala también
 en Supabase antes de habilitar esa función en el despliegue.
+Para que las reservas web y las órdenes de Booking compartan el inventario por
+tipo de habitación y noche, aplica después
+[202612120001_unified_marketplace_inventory.sql](./database/migrations/202612120001_unified_marketplace_inventory.sql).
+La interfaz consulta disponibilidad y precio antes de confirmar; la RPC vuelve
+a validar el inventario dentro de la transacción y usa `Idempotency-Key` para
+evitar reservas duplicadas al reintentar. El panel administrativo lista el
+origen, las fechas, el tipo y la cantidad de habitaciones de ambas vías. Esta
+migración debe ejecutarse manualmente en el SQL Editor de Supabase con una
+cuenta autorizada; ni el workflow de Azure ni Render la aplican al desplegar.
 Los scripts deben ejecutarse en Supabase con una cuenta autorizada.
 En Render, el despliegue del backend no ejecuta migraciones de Supabase. Para
 actualizar una base remota existente, ejecuta la migración
@@ -847,9 +857,10 @@ INVENTORY_SERVICE_ID=NODE_ALO_SIGLAS
 
 No agregues `.env` al repositorio. `SUPABASE_KEY` es para los flujos de Auth;
 `SUPABASE_SERVICE_ROLE_KEY` solo se usa por el servidor y script de seeding.
-No compartas ni envíes credenciales por chat; en Azure se configuran directamente
-en Application Settings. `API_KEY` autentica la integración entrante y el
-backend la envía como `X-API-Key` en el check-in y, cuando se selecciona REST,
+No compartas ni envíes credenciales por chat; en Azure se configuran en
+Application Settings y en Render en Environment. `API_KEY` autentica la
+integración entrante y el backend la envía como `X-API-Key` en el check-in y,
+cuando se selecciona REST,
 en la sincronización de stock saliente a Booking Core. `BOOKING_CORE_API_URL`
 puede reemplazar el host remoto del check-in; por defecto es
 `https://booking-core-api.azurewebsites.net`. Para stock usa
@@ -872,8 +883,10 @@ este nodo. La alternativa CloudAMQP requiere `STOCK_SYNC_MODE=rabbitmq`.
    `202611080001_alojamientos_v2_core.sql` y
    `202612100001_create_favoritos.sql`. Para habilitar la sincronización de
    huéspedes y guardar el resultado del check-in, aplica también
-   `202612110001_booking_guest_sync_checkin.sql`. No vuelvas a ejecutar una
-   migración que ya esté aplicada.
+   `202612110001_booking_guest_sync_checkin.sql`. Finalmente, ejecuta
+   `202612120001_unified_marketplace_inventory.sql` para que las reservas del
+   Marketplace y Booking bloqueen las mismas habitaciones por noche. No vuelvas
+   a ejecutar una migración que ya esté aplicada.
 3. La migración v2 requiere la estructura base de `alojamientos` y `reservas`.
    Para el proyecto Supabase que se usará con Azure, el usuario confirmó que
    `202611080001_alojamientos_v2_core.sql` ya se ejecutó. Antes de integrar,
@@ -881,20 +894,22 @@ este nodo. La alternativa CloudAMQP requiere `STOCK_SYNC_MODE=rabbitmq`.
    [verify_alojamientos_v2.sql](./database/verify_alojamientos_v2.sql) en SQL
    Editor y confirma que las tablas, funciones y triggers aparecen. No recrees
    una base ni vuelvas a aplicar esa migración.
-4. Instala y compila:
+4. Aplica la migración de inventario compartido en Supabase antes de confirmar
+   reservas web. El despliegue no ejecuta SQL automáticamente.
+5. Instala y compila:
 
    ```powershell
    npm install
    npm run build
    ```
 
-5. Inicia en desarrollo:
+6. Inicia en desarrollo:
 
    ```powershell
    npm run start:dev
    ```
 
-6. Para ejecutar la compilación como producción en local:
+7. Para ejecutar la compilación como producción en local:
 
    ```powershell
    npm run build

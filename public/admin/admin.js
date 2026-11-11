@@ -9,6 +9,13 @@ const STATUS_LABELS = {
   confirmada: 'Confirmada',
   cancelada: 'Cancelada',
 };
+const INTEGRATION_STATUS_LABELS = {
+  PENDING: 'Integración pendiente',
+  CONFIRMED: 'Confirmada en Booking',
+  CANCELLED: 'Cancelada en Booking',
+  CHECKED_IN: 'Check-in registrado',
+  CHECKED_OUT: 'Check-out registrado',
+};
 const FALLBACK_IMAGE =
   'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=240&q=75';
 
@@ -23,6 +30,7 @@ let listings = [];
 let pendingDelete = null;
 let toastTimeout;
 let currentUser = null;
+let bookingsLoading = false;
 
 function escapeHtml(value = '') {
   return String(value).replace(/[&<>"']/g, (character) => {
@@ -227,10 +235,12 @@ async function loadUsers() {
   }
 }
 
-async function loadBookings() {
+async function loadBookings(silent = false) {
+  if (bookingsLoading) return;
+  bookingsLoading = true;
   const error = document.querySelector('#booking-error');
   error.hidden = true;
-  setLoadingRow(bookingBody, 7, 'Cargando reservas…');
+  if (!silent) setLoadingRow(bookingBody, 7, 'Cargando reservas…');
   try {
     const result = await apiRequest('/reservas');
     const bookings = Array.isArray(result) ? result : result.data;
@@ -244,7 +254,7 @@ async function loadBookings() {
       bookings.length,
     );
     document.querySelector('#booking-table-count').textContent =
-      `${bookings.length} ${bookings.length === 1 ? 'reserva' : 'reservas'} recibidas`;
+      `${bookings.length} ${bookings.length === 1 ? 'reserva' : 'reservas'} recibidas · actualizado ${new Intl.DateTimeFormat('es-EC', { hour: '2-digit', minute: '2-digit' }).format(new Date())}`;
 
     if (!bookings.length) {
       setLoadingRow(bookingBody, 7, 'Todavía no se han recibido reservas.');
@@ -279,26 +289,44 @@ async function loadBookings() {
                 booking.externalOrderId
               ? `<button class="row-action" type="button" data-action="checkin" data-order-id="${escapeHtml(booking.externalOrderId)}">Registrar llegada</button>`
               : '—';
+        const source = booking.externalOrderId
+          ? `Booking · ${booking.externalOrderId}`
+          : 'Marketplace';
+        const integrationStatus =
+          INTEGRATION_STATUS_LABELS[booking.estadoIntegracion] ||
+          booking.estadoIntegracion ||
+          '';
+        const roomDetails = [
+          booking.tipoHabitacionNombre || booking.tipoHabitacionCodigo,
+          `${Number(booking.cantidadHabitaciones) || 1} habitación(es)`,
+          `${Number(booking.numHuespedes) || 0} huésped(es)`,
+        ]
+          .filter(Boolean)
+          .join(' · ');
         return `
           <tr>
             <td><div class="guest-cell"><strong>${escapeHtml(booking.clienteNombre)}</strong><small>${escapeHtml(booking.clienteEmail)}</small></div></td>
-            <td>${escapeHtml(accommodation)}</td>
-            <td class="stay-cell">${formatDate(booking.fechaCheckin)} – ${formatDate(booking.fechaCheckout)}</td>
+            <td><div class="guest-cell"><strong>${escapeHtml(accommodation)}</strong><small>${escapeHtml(source)}</small></div></td>
+            <td class="stay-cell">${formatDate(booking.fechaCheckin)} – ${formatDate(booking.fechaCheckout)}<small>${escapeHtml(roomDetails)}</small></td>
             <td class="price-cell">${formatMoney(booking.precioTotal, booking.moneda)}</td>
-            <td><span class="status-badge ${escapeHtml(booking.estado)}">${escapeHtml(status)}</span></td>
+            <td><span class="status-badge ${escapeHtml(booking.estado)}">${escapeHtml(status)}</span><small>${escapeHtml(integrationStatus)}</small></td>
             <td>${formatDate(booking.createdAt)}</td>
             <td>${checkinCell}</td>
           </tr>`;
       })
       .join('');
   } catch (requestError) {
-    document.querySelector('#stat-bookings').textContent = '—';
-    document.querySelector('#stat-revenue').textContent = '—';
-    document.querySelector('#nav-booking-count').textContent = '—';
-    document.querySelector('#booking-table-count').textContent =
-      'No se pudieron consultar las reservas';
-    setLoadingRow(bookingBody, 7, 'No se pudieron cargar las reservas.');
+    if (!silent) {
+      document.querySelector('#stat-bookings').textContent = '—';
+      document.querySelector('#stat-revenue').textContent = '—';
+      document.querySelector('#nav-booking-count').textContent = '—';
+      document.querySelector('#booking-table-count').textContent =
+        'No se pudieron consultar las reservas';
+      setLoadingRow(bookingBody, 7, 'No se pudieron cargar las reservas.');
+    }
     showSectionError('#booking-error', requestError.message);
+  } finally {
+    bookingsLoading = false;
   }
 }
 
@@ -722,3 +750,8 @@ async function initializeAdmin() {
 }
 
 void initializeAdmin();
+window.setInterval(() => {
+  if (!document.hidden && currentUser?.role === 'admin') {
+    void loadBookings(true);
+  }
+}, 30_000);

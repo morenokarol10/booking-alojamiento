@@ -39,6 +39,15 @@ export class ReservaEntity {
   @ApiProperty({ example: 2 })
   numHuespedes!: number;
 
+  @ApiPropertyOptional({ example: 1, minimum: 1 })
+  cantidadHabitaciones?: number;
+
+  @ApiPropertyOptional({ nullable: true })
+  tipoHabitacionCodigo?: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  tipoHabitacionNombre?: string | null;
+
   @ApiProperty({ example: 255 })
   precioTotal!: number;
 
@@ -68,6 +77,9 @@ export class ReservaEntity {
 
   @ApiPropertyOptional({ nullable: true, minimum: 1, maximum: 20 })
   huespedesReales?: number | null;
+
+  @ApiPropertyOptional({ format: 'uuid', nullable: true })
+  cotizacionId?: string | null;
 
   @ApiPropertyOptional({ type: ReservaAlojamientoEntity })
   alojamiento?: ReservaAlojamientoEntity;

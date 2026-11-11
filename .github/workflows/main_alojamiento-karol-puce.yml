@@ -82,12 +82,15 @@ jobs:
       - name: Validate Azure App Service settings
         run: |
           set -euo pipefail
-          app_name="alojamiento-karol-puce"
-          resource_group="$(az webapp show --name "$app_name" --query resourceGroup --output tsv)"
-          if [ -z "$resource_group" ]; then
-            echo "::error::Azure Web App '$app_name' was not found."
+          target_host="alojamiento-karol-puce-c7dcf7f9fhcncrak.spaincentral-01.azurewebsites.net"
+          app_matches="$(az webapp list --query "[?defaultHostName=='${target_host}'].{name:name,resourceGroup:resourceGroup}" --output json)"
+          app_name="$(jq -r '.[0].name // empty' <<< "$app_matches")"
+          resource_group="$(jq -r '.[0].resourceGroup // empty' <<< "$app_matches")"
+          if [ -z "$app_name" ] || [ -z "$resource_group" ]; then
+            echo "::error::Azure Web App for '$target_host' was not found."
             exit 1
           fi
+          echo "AZURE_WEBAPP_NAME=$app_name" >> "$GITHUB_ENV"
 
           settings="$(az webapp config appsettings list --resource-group "$resource_group" --name "$app_name" --output json)"
           required_settings=(
@@ -139,14 +142,14 @@ jobs:
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
-          app-name: alojamiento-karol-puce
+          app-name: ${{ env.AZURE_WEBAPP_NAME }}
           slot-name: Production
           package: deployment.zip
 
       - name: Verify deployed health endpoint
         run: |
           set -euo pipefail
-          health_url="https://alojamiento-karol-puce.azurewebsites.net/api/v2/alojamientos/health"
+          health_url="https://alojamiento-karol-puce-c7dcf7f9fhcncrak.spaincentral-01.azurewebsites.net/api/v2/alojamientos/health"
           for attempt in $(seq 1 30); do
             status="$(curl --silent --show-error --output /tmp/alojamientos-health.json --write-out '%{http_code}' "$health_url" || true)"
             if [ "$status" = "200" ]; then

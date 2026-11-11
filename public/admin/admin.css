@@ -703,7 +703,15 @@ textarea:focus-visible {
   font-size: 9px;
 }
 .stay-cell {
-  white-space: nowrap;
+  min-width: 190px;
+}
+.stay-cell small,
+.booking-table td > small {
+  display: block;
+  margin-top: 4px;
+  color: #939c94;
+  font-size: 9px;
+  line-height: 1.4;
 }
 .event-table td {
   vertical-align: middle;

@@ -29,6 +29,7 @@ import {
 import { CreateReservaDto } from './dto/create-reserva.dto';
 import { CancelReservaDto } from './dto/cancel-reserva.dto';
 import { CheckinReservaDto } from './dto/checkin-reserva.dto';
+import { CheckOutDto } from './dto/check-out.dto';
 import {
   CancelReservaResponseDto,
   ReservaResponseDto,
@@ -157,6 +158,47 @@ export class ReservationsController {
       );
     }
     return this.reservationsService.checkIn(externalOrderId, dto);
+  }
+
+  @Post(':reservationId/checkin-local')
+  @UseGuards(SupabaseAuthGuard, RolesGuard)
+  @Roles('admin')
+  @ApiBearerAuth('supabase-jwt')
+  @ApiOperation({
+    summary: 'Registrar check-in de una reserva del marketplace',
+  })
+  checkInMarketplace(
+    @Param('reservationId', ParseUUIDPipe) reservationId: string,
+    @Body() dto: CheckinReservaDto,
+  ) {
+    return this.reservationsService.checkInMarketplace(reservationId, dto);
+  }
+
+  @Post(':reservationId/checkout')
+  @UseGuards(SupabaseAuthGuard, RolesGuard)
+  @Roles('admin')
+  @ApiBearerAuth('supabase-jwt')
+  @ApiOperation({
+    summary: 'Registrar check-out y comenzar la limpieza de habitaciones',
+  })
+  checkOut(
+    @Param('reservationId', ParseUUIDPipe) reservationId: string,
+    @Body() dto: CheckOutDto = new CheckOutDto(),
+  ) {
+    return this.reservationsService.checkOut(reservationId, dto);
+  }
+
+  @Post(':reservationId/limpieza/completar')
+  @UseGuards(SupabaseAuthGuard, RolesGuard)
+  @Roles('admin')
+  @ApiBearerAuth('supabase-jwt')
+  @ApiOperation({
+    summary: 'Marcar como limpias y liberar las habitaciones asignadas',
+  })
+  completeRoomCleaning(
+    @Param('reservationId', ParseUUIDPipe) reservationId: string,
+  ) {
+    return this.reservationsService.completeRoomCleaning(reservationId);
   }
 
   @Get('mis-reservas')

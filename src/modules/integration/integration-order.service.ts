@@ -14,6 +14,7 @@ import {
   IntegrationCancelOrderDto,
   IntegrationOrderCreateDto,
 } from './integration-order.dto';
+import { CheckOutDto } from '../reservations/dto/check-out.dto';
 import { isValidGuestDocument } from './integration-document-validator';
 
 type Guest = NonNullable<IntegrationOrderCreateDto['huespedTitular']>;
@@ -290,6 +291,25 @@ export class IntegrationOrderService {
     return { body, replayed: replayed === true };
   }
 
+  async checkOut(orderRef: string, dto: CheckOutDto, correlationId: string) {
+    const { data, error } = await this.supabase.rpc(
+      'checkout_alojamiento_order_v2',
+      {
+        p_order_ref: orderRef,
+        p_correlation_id: correlationId,
+        p_consumos: dto.consumosMinibar ?? [],
+        p_metodo_pago: dto.metodoPagoConsumos ?? null,
+      },
+    );
+    if (error) this.throwDatabaseError(error);
+    if (!isRecord(data)) {
+      throw new InternalServerErrorException(
+        'La base de datos no devolvió el check-out.',
+      );
+    }
+    return data;
+  }
+
   private normalizeGuest(dto: IntegrationOrderCreateDto): Guest {
     if (dto.huespedTitular) return dto.huespedTitular;
     if (dto.customer_contact) {
@@ -383,9 +403,16 @@ export class IntegrationOrderService {
   }): never {
     const message = error.message ?? '';
     const code = message.match(
-      /OUT_OF_STOCK|QUOTE_EXPIRED|QUOTE_NOT_FOUND|PRICE_MISMATCH|RESTRICTION_VIOLATED|VALIDATION_FAILED|CAPACITY_EXCEEDED|PROMOTIONS_NOT_ALLOWED|DISCOUNT_EXCEEDS_CONTRACT|IDEMPOTENCY_KEY_REUSED|IDEMPOTENCY_IN_PROGRESS|INVALID_STATE_TRANSITION|ORDER_NOT_FOUND|ROOM_NOT_FOUND/,
+      /NO_ROOMS_AVAILABLE|ROOM_STILL_CLEANING|ROOM_STILL_OCCUPIED|ROOM_ASSIGNMENT_NOT_FOUND|OUT_OF_STOCK|QUOTE_EXPIRED|QUOTE_NOT_FOUND|PRICE_MISMATCH|RESTRICTION_VIOLATED|VALIDATION_FAILED|CAPACITY_EXCEEDED|PROMOTIONS_NOT_ALLOWED|DISCOUNT_EXCEEDS_CONTRACT|IDEMPOTENCY_KEY_REUSED|IDEMPOTENCY_IN_PROGRESS|INVALID_STATE_TRANSITION|ORDER_NOT_FOUND|ROOM_NOT_FOUND/,
     )?.[0];
-    if (code === 'OUT_OF_STOCK' || code === 'IDEMPOTENCY_IN_PROGRESS') {
+    if (
+      code === 'NO_ROOMS_AVAILABLE' ||
+      code === 'ROOM_STILL_CLEANING' ||
+      code === 'ROOM_STILL_OCCUPIED' ||
+      code === 'ROOM_ASSIGNMENT_NOT_FOUND' ||
+      code === 'OUT_OF_STOCK' ||
+      code === 'IDEMPOTENCY_IN_PROGRESS'
+    ) {
       throw new ConflictException({ code, detail: message });
     }
     if (code === 'QUOTE_EXPIRED' || code === 'PRICE_MISMATCH') {

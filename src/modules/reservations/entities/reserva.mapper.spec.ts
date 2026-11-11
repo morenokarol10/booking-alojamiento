@@ -31,6 +31,16 @@ describe('reserva mapper', () => {
         codigo: 'SUITE_FAMILIAR',
         nombre: 'Suite familiar',
       },
+      reservas_unidades_habitacion: [
+        {
+          unidades_habitacion: {
+            id: '50000000-0000-4000-8000-000000000001',
+            codigo: 'SUITE_FAMILIAR-001',
+            estado: 'RESERVADA',
+            limpieza_hasta: null,
+          },
+        },
+      ],
     });
 
     expect(entity).toMatchObject({
@@ -45,6 +55,14 @@ describe('reserva mapper', () => {
       precioTotal: 255,
       pagoEstado: 'exitoso',
       estado: 'confirmada',
+      habitacionesAsignadas: [
+        {
+          id: '50000000-0000-4000-8000-000000000001',
+          codigo: 'SUITE_FAMILIAR-001',
+          estado: 'RESERVADA',
+          limpiezaHasta: null,
+        },
+      ],
       alojamiento: { nombre: 'Suite Quito', ciudad: 'Quito' },
     });
     expect(entity).not.toHaveProperty('cliente_nombre');

@@ -19,6 +19,7 @@ import { CancelReservaDto } from './dto/cancel-reserva.dto';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { toReservaEntity } from './entities/reserva.mapper';
 import { CheckinReservaDto } from './dto/checkin-reserva.dto';
+import { CheckOutDto } from './dto/check-out.dto';
 
 @Injectable()
 export class ReservationsService {
@@ -321,7 +322,7 @@ export class ReservationsService {
     const { data, error } = await this.supabase
       .from('reservas')
       .select(
-        '*, alojamientos (id, nombre, ciudad), tipos_habitacion (codigo, nombre)',
+        '*, alojamientos (id, nombre, ciudad), tipos_habitacion (codigo, nombre), reservas_unidades_habitacion (unidades_habitacion (id, codigo, estado, limpieza_hasta))',
       )
       .order('created_at', { ascending: false });
 
@@ -394,6 +395,17 @@ export class ReservationsService {
       });
     }
 
+    const { error: roomValidationError } = await this.supabase.rpc(
+      'validate_alojamiento_checkin_room_state',
+      { p_reservation_id: reservation.id },
+    );
+    if (roomValidationError) {
+      this.throwRoomOperationError(
+        roomValidationError,
+        'validar la habitación antes del check-in',
+      );
+    }
+
     const apiKey = this.config.get<string>('API_KEY');
     if (!apiKey) {
       throw new ServiceUnavailableException(
@@ -462,6 +474,14 @@ export class ReservationsService {
       .select('id')
       .maybeSingle();
     if (updateError || !updated) {
+      if (
+        updateError?.message.includes('ROOM_STILL_CLEANING') ||
+        updateError?.message.includes('ROOM_STILL_OCCUPIED')
+      ) {
+        throw new ConflictException(
+          'La habitación asignada todavía no está disponible.',
+        );
+      }
       this.logger.error(
         `Booking Core confirmó el check-in, pero no se pudo actualizar la orden ${externalOrderId} en Supabase.`,
       );
@@ -477,6 +497,145 @@ export class ReservationsService {
         huespedes_reales: dto.huespedesReales,
       },
       message: 'Check-in presencial confirmado por Booking Core.',
+    };
+  }
+
+  async checkInMarketplace(reservationId: string, dto: CheckinReservaDto) {
+    const { data: reservation, error: lookupError } = await this.supabase
+      .from('reservas')
+      .select(
+        'id,external_order_id,estado_integracion,huespedes_reales,fecha_checkin,fecha_checkout',
+      )
+      .eq('id', reservationId)
+      .maybeSingle();
+    if (lookupError) {
+      throw new InternalServerErrorException(
+        'No se pudo consultar la reserva para registrar el check-in.',
+      );
+    }
+    if (!reservation) {
+      throw new NotFoundException('No se encontró la reserva.');
+    }
+    if (reservation.external_order_id) {
+      throw new ConflictException(
+        'Las reservas de Booking deben confirmar el check-in con Booking Core.',
+      );
+    }
+    if (reservation.estado_integracion === 'CHECKED_IN') {
+      if (Number(reservation.huespedes_reales) !== dto.huespedesReales) {
+        throw new ConflictException(
+          'El check-in ya fue registrado con otro número de huéspedes.',
+        );
+      }
+      return {
+        data: { orderId: reservation.id, estado: 'CHECKED_IN' },
+        message: 'El check-in ya estaba registrado.',
+      };
+    }
+    if (reservation.estado_integracion !== 'CONFIRMED') {
+      throw new ConflictException(
+        'Solo se puede registrar el check-in de una reserva confirmada.',
+      );
+    }
+
+    const localNow = this.guayaquilDateTime();
+    if (
+      localNow.date < String(reservation.fecha_checkin) ||
+      localNow.date >= String(reservation.fecha_checkout)
+    ) {
+      throw new ConflictException(
+        'El check-in solo se puede registrar durante las fechas de la reserva.',
+      );
+    }
+    if (localNow.minutes < 14 * 60) {
+      throw new UnprocessableEntityException({
+        code: 'CHECKIN_TIME_NOT_REACHED',
+        detail:
+          'El check-in presencial se habilita a partir de las 14:00 hora de Guayaquil.',
+      });
+    }
+
+    const { data: updated, error: updateError } = await this.supabase
+      .from('reservas')
+      .update({
+        estado_integracion: 'CHECKED_IN',
+        huespedes_reales: dto.huespedesReales,
+      })
+      .eq('id', reservation.id)
+      .eq('estado_integracion', 'CONFIRMED')
+      .select('id')
+      .maybeSingle();
+    if (updateError) {
+      if (
+        updateError.message.includes('ROOM_STILL_CLEANING') ||
+        updateError.message.includes('ROOM_STILL_OCCUPIED')
+      ) {
+        throw new ConflictException(
+          'La habitación asignada todavía no está disponible.',
+        );
+      }
+      this.logger.error(
+        `No se pudo actualizar el estado de check-in de la reserva ${reservation.id} (código Supabase: ${updateError.code ?? 'desconocido'}).`,
+      );
+      throw new InternalServerErrorException(
+        'No se pudo registrar el check-in.',
+      );
+    }
+    if (!updated) {
+      throw new ConflictException(
+        'La reserva cambió de estado antes de registrar el check-in.',
+      );
+    }
+    return {
+      data: { orderId: reservation.id, estado: 'CHECKED_IN' },
+      message: 'Check-in registrado correctamente.',
+    };
+  }
+
+  async checkOut(reservationId: string, dto: CheckOutDto) {
+    const { data, error } = await this.supabase.rpc(
+      'checkout_alojamiento_order_v2',
+      {
+        p_order_ref: reservationId,
+        p_correlation_id: randomUUID(),
+        p_consumos: dto.consumosMinibar ?? [],
+        p_metodo_pago: dto.metodoPagoConsumos ?? null,
+      },
+    );
+    if (error) {
+      this.throwRoomOperationError(error, 'registrar el check-out');
+    }
+    if (!isDatabaseRow(data)) {
+      throw new InternalServerErrorException(
+        'Supabase no devolvió el resultado del check-out.',
+      );
+    }
+    return {
+      data,
+      message:
+        'Check-out registrado. La habitación pasó a limpieza y se liberará automáticamente en 60 minutos.',
+    };
+  }
+
+  async completeRoomCleaning(reservationId: string) {
+    const { data, error } = await this.supabase.rpc(
+      'complete_alojamiento_room_cleaning',
+      { p_reservation_id: reservationId },
+    );
+    if (error) {
+      this.throwRoomOperationError(error, 'marcar la habitación como limpia');
+    }
+    if (!isDatabaseRow(data)) {
+      throw new InternalServerErrorException(
+        'Supabase no devolvió el resultado de la limpieza.',
+      );
+    }
+    return {
+      data,
+      message:
+        data.yaEstabaLimpia === true
+          ? 'La habitación ya estaba limpia y disponible.'
+          : 'La habitación quedó limpia y disponible.',
     };
   }
 
@@ -526,6 +685,36 @@ export class ReservationsService {
       date: `${values.year}-${values.month}-${values.day}`,
       minutes: Number(values.hour) * 60 + Number(values.minute),
     };
+  }
+
+  private throwRoomOperationError(
+    error: { code?: string; message: string },
+    action: string,
+  ): never {
+    if (error.message.includes('ORDER_NOT_FOUND')) {
+      throw new NotFoundException('No se encontró la reserva.');
+    }
+    if (
+      error.message.includes('INVALID_STATE_TRANSITION') ||
+      error.message.includes('ROOM_STILL_CLEANING') ||
+      error.message.includes('ROOM_STILL_OCCUPIED') ||
+      error.message.includes('ROOM_ASSIGNMENT_NOT_FOUND')
+    ) {
+      throw new ConflictException({
+        code: error.message.includes('ROOM_STILL_CLEANING')
+          ? 'ROOM_STILL_CLEANING'
+          : error.message.includes('ROOM_STILL_OCCUPIED')
+            ? 'ROOM_STILL_OCCUPIED'
+            : 'INVALID_STATE_TRANSITION',
+        detail: error.message,
+      });
+    }
+    this.logger.error(
+      `No se pudo ${action} (código Supabase: ${error.code ?? 'desconocido'}).`,
+    );
+    throw new InternalServerErrorException(
+      `No se pudo ${action}. Inténtalo nuevamente.`,
+    );
   }
 }
 

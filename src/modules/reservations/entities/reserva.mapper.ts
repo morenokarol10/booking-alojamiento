@@ -2,6 +2,7 @@ import { InternalServerErrorException } from '@nestjs/common';
 import type {
   EstadoPago,
   EstadoReserva,
+  EstadoUnidadHabitacion,
   ReservaEntity,
 } from './reserva.entity';
 
@@ -28,14 +29,10 @@ export function toReservaEntity(row: Record<string, unknown>): ReservaEntity {
       'cantidad_habitaciones',
     ),
     tipoHabitacionCodigo: nullableString(
-      isRecord(row.tipos_habitacion)
-        ? row.tipos_habitacion.codigo
-        : null,
+      isRecord(row.tipos_habitacion) ? row.tipos_habitacion.codigo : null,
     ),
     tipoHabitacionNombre: nullableString(
-      isRecord(row.tipos_habitacion)
-        ? row.tipos_habitacion.nombre
-        : null,
+      isRecord(row.tipos_habitacion) ? row.tipos_habitacion.nombre : null,
     ),
     precioTotal: requireNumber(row.precio_total, 'precio_total'),
     moneda: requireString(row.moneda, 'moneda'),
@@ -51,6 +48,7 @@ export function toReservaEntity(row: Record<string, unknown>): ReservaEntity {
     estadoIntegracion: nullableString(row.estado_integracion),
     huespedesReales: nullableNumber(row.huespedes_reales),
     cotizacionId: nullableString(row.cotizacion_id),
+    habitacionesAsignadas: mapAssignedRooms(row.reservas_unidades_habitacion),
   };
 
   const accommodation = row.alojamientos;
@@ -64,9 +62,50 @@ export function toReservaEntity(row: Record<string, unknown>): ReservaEntity {
   return entity;
 }
 
+function mapAssignedRooms(
+  value: unknown,
+): ReservaEntity['habitacionesAsignadas'] {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) {
+    throw new InternalServerErrorException(
+      'Supabase devolvió las habitaciones asignadas con formato no válido.',
+    );
+  }
+  return value.map((assignment) => {
+    if (!isRecord(assignment) || !isRecord(assignment.unidades_habitacion)) {
+      throw new InternalServerErrorException(
+        'Supabase devolvió una habitación asignada incompleta.',
+      );
+    }
+    const unit = assignment.unidades_habitacion;
+    if (!isEstadoUnidadHabitacion(unit.estado)) {
+      throw new InternalServerErrorException(
+        'Supabase devolvió el estado de habitación no válido.',
+      );
+    }
+    return {
+      id: requireString(unit.id, 'unidades_habitacion.id'),
+      codigo: requireString(unit.codigo, 'unidades_habitacion.codigo'),
+      estado: unit.estado,
+      limpiezaHasta: nullableString(unit.limpieza_hasta),
+    };
+  });
+}
+
 function isEstadoReserva(value: unknown): value is EstadoReserva {
   return (
     value === 'pendiente' || value === 'confirmada' || value === 'cancelada'
+  );
+}
+
+function isEstadoUnidadHabitacion(
+  value: unknown,
+): value is EstadoUnidadHabitacion {
+  return (
+    value === 'DISPONIBLE' ||
+    value === 'RESERVADA' ||
+    value === 'OCUPADA' ||
+    value === 'LIMPIEZA'
   );
 }
 

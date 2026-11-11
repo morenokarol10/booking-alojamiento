@@ -16,6 +16,12 @@ const INTEGRATION_STATUS_LABELS = {
   CHECKED_IN: 'Check-in registrado',
   CHECKED_OUT: 'Check-out registrado',
 };
+const ROOM_STATUS_LABELS = {
+  DISPONIBLE: 'Limpia y disponible',
+  RESERVADA: 'Reservada',
+  OCUPADA: 'Ocupada',
+  LIMPIEZA: 'En limpieza',
+};
 const FALLBACK_IMAGE =
   'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=240&q=75';
 
@@ -207,13 +213,15 @@ async function loadUsers() {
   try {
     const result = await apiRequest('/admin/usuarios');
     const users = Array.isArray(result?.data) ? result.data : null;
-    if (!users) throw new Error('La API devolvió una lista de usuarios no válida.');
+    if (!users)
+      throw new Error('La API devolvió una lista de usuarios no válida.');
     if (!users.length) {
       setLoadingRow(target, 5, 'No hay cuentas registradas.');
       return;
     }
     target.innerHTML = users
-      .map((user) => `
+      .map(
+        (user) => `
         <tr>
           <td><div class="guest-cell"><strong>${escapeHtml(user.fullName || 'Sin nombre')}</strong><small>${escapeHtml(user.email)}</small></div></td>
           <td>${escapeHtml(user.phone || '—')}</td>
@@ -226,7 +234,8 @@ async function loadUsers() {
           </td>
           <td>${formatDate(user.createdAt)}</td>
           <td><span class="status-badge ${user.emailConfirmed ? 'confirmada' : 'pendiente'}">${user.emailConfirmed ? 'Activo' : 'Pendiente'}</span></td>
-        </tr>`)
+        </tr>`,
+      )
       .join('');
   } catch (requestError) {
     setLoadingRow(target, 5, 'No se pudieron cargar los usuarios.');
@@ -282,13 +291,29 @@ async function loadBookings(silent = false) {
       .map((booking) => {
         const accommodation = booking.alojamiento?.nombre || 'Alojamiento';
         const status = STATUS_LABELS[booking.estado] || booking.estado || '—';
-        const checkinCell =
-          booking.estadoIntegracion === 'CHECKED_IN'
-            ? '<span class="status-badge confirmada">Registrado</span>'
-            : booking.estadoIntegracion === 'CONFIRMED' &&
-                booking.externalOrderId
-              ? `<button class="row-action" type="button" data-action="checkin" data-order-id="${escapeHtml(booking.externalOrderId)}">Registrar llegada</button>`
-              : '—';
+        const assignedRooms = Array.isArray(booking.habitacionesAsignadas)
+          ? booking.habitacionesAsignadas
+          : [];
+        const roomDetailsMarkup = assignedRooms.length
+          ? assignedRooms
+              .map((room) => {
+                const cleaningUntil =
+                  room.estado === 'LIMPIEZA' && room.limpiezaHasta
+                    ? ` · hasta ${formatDate(room.limpiezaHasta, true)}`
+                    : '';
+                return `<small>${escapeHtml(room.codigo)} · ${escapeHtml(ROOM_STATUS_LABELS[room.estado] || room.estado)}${cleaningUntil}</small>`;
+              })
+              .join('')
+          : '<small>Habitación sin asignación</small>';
+        const operationsCell =
+          booking.estadoIntegracion === 'CONFIRMED'
+            ? `<button class="row-action" type="button" data-action="checkin" data-reservation-id="${escapeHtml(booking.id)}"${booking.externalOrderId ? ` data-order-id="${escapeHtml(booking.externalOrderId)}"` : ''}>Registrar llegada</button>`
+            : booking.estadoIntegracion === 'CHECKED_IN'
+              ? `<button class="row-action" type="button" data-action="checkout" data-reservation-id="${escapeHtml(booking.id)}">Registrar salida</button>`
+              : booking.estadoIntegracion === 'CHECKED_OUT' &&
+                  assignedRooms.some((room) => room.estado === 'LIMPIEZA')
+                ? `<button class="row-action" type="button" data-action="mark-clean" data-reservation-id="${escapeHtml(booking.id)}">Marcar limpia</button>`
+                : '—';
         const source = booking.externalOrderId
           ? `Booking · ${booking.externalOrderId}`
           : 'Marketplace';
@@ -311,7 +336,7 @@ async function loadBookings(silent = false) {
             <td class="price-cell">${formatMoney(booking.precioTotal, booking.moneda)}</td>
             <td><span class="status-badge ${escapeHtml(booking.estado)}">${escapeHtml(status)}</span><small>${escapeHtml(integrationStatus)}</small></td>
             <td>${formatDate(booking.createdAt)}</td>
-            <td>${checkinCell}</td>
+            <td>${roomDetailsMarkup}${operationsCell}</td>
           </tr>`;
       })
       .join('');
@@ -617,40 +642,60 @@ document
 bookingBody.addEventListener('click', async (event) => {
   const button =
     event.target instanceof Element
-      ? event.target.closest('button[data-action="checkin"]')
+      ? event.target.closest('button[data-action]')
       : null;
   if (!button) return;
 
-  const externalOrderId = button.dataset.orderId;
-  if (!externalOrderId) {
-    showToast('La reserva no tiene un identificador externo.', true);
+  const action = button.dataset.action;
+  const reservationId = button.dataset.reservationId;
+  if (!reservationId) {
+    showToast('La reserva no tiene un identificador válido.', true);
     return;
   }
-  const value = window.prompt(
-    '¿Cuántos huéspedes llegaron realmente?',
-    '1',
-  );
-  if (value === null) return;
-  const huespedesReales = Number(value);
-  if (
-    !Number.isInteger(huespedesReales) ||
-    huespedesReales < 1 ||
-    huespedesReales > 20
-  ) {
-    showToast('Ingresa un número entero de huéspedes entre 1 y 20.', true);
-    return;
+  let huespedesReales;
+  if (action === 'checkin') {
+    const value = window.prompt('¿Cuántos huéspedes llegaron realmente?', '1');
+    if (value === null) return;
+    huespedesReales = Number(value);
+    if (
+      !Number.isInteger(huespedesReales) ||
+      huespedesReales < 1 ||
+      huespedesReales > 20
+    ) {
+      showToast('Ingresa un número entero de huéspedes entre 1 y 20.', true);
+      return;
+    }
   }
 
   button.disabled = true;
   try {
-    const result = await apiRequest(
-      `/reservas/${encodeURIComponent(externalOrderId)}/checkin`,
-      {
-        method: 'POST',
-        body: JSON.stringify({ huespedesReales }),
-      },
+    let path;
+    let body;
+    if (action === 'checkin') {
+      path = button.dataset.orderId
+        ? `/reservas/${encodeURIComponent(button.dataset.orderId)}/checkin`
+        : `/reservas/${encodeURIComponent(reservationId)}/checkin-local`;
+      body = JSON.stringify({ huespedesReales });
+    } else if (action === 'checkout') {
+      path = `/reservas/${encodeURIComponent(reservationId)}/checkout`;
+    } else if (action === 'mark-clean') {
+      path = `/reservas/${encodeURIComponent(reservationId)}/limpieza/completar`;
+    } else {
+      return;
+    }
+
+    const result = await apiRequest(path, {
+      method: 'POST',
+      ...(body ? { body } : {}),
+    });
+    showToast(
+      result?.message ||
+        (action === 'checkin'
+          ? 'Check-in registrado.'
+          : action === 'checkout'
+            ? 'Check-out registrado; habitación en limpieza durante 1 hora.'
+            : 'Habitación marcada como limpia y disponible.'),
     );
-    showToast(result?.message || 'Check-in presencial registrado.');
     await loadBookings();
   } catch (requestError) {
     showToast(requestError.message, true);

@@ -155,4 +155,31 @@ describe('IntegrationOrderService', () => {
       }),
     );
   });
+
+  it('sends checkout through the atomic database operation', async () => {
+    const { service, rpc } = createService({
+      data: {
+        orderId: '4cc82cb3-4f3a-474c-b04b-bff402b52d57',
+        estado: 'CHECKED_OUT',
+      },
+      error: null,
+    });
+
+    await expect(
+      service.checkOut(
+        'ORD-HTL-AB12',
+        { consumosMinibar: [], metodoPagoConsumos: 'EFECTIVO' },
+        'corr-1234',
+      ),
+    ).resolves.toMatchObject({ estado: 'CHECKED_OUT' });
+    expect(rpc).toHaveBeenCalledWith(
+      'checkout_alojamiento_order_v2',
+      expect.objectContaining({
+        p_order_ref: 'ORD-HTL-AB12',
+        p_correlation_id: 'corr-1234',
+        p_consumos: [],
+        p_metodo_pago: 'EFECTIVO',
+      }),
+    );
+  });
 });

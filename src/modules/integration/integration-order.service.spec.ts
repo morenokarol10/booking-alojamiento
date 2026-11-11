@@ -37,6 +37,7 @@ describe('IntegrationOrderService', () => {
   ) => {
     const rpc = jest.fn().mockResolvedValue(rpcResult);
     const catalog = {
+      beds: jest.fn(() => ({ numero_camas: 1, camas: '1 cama matrimonial' })),
       pricingForOrder: jest.fn().mockResolvedValue({
         nights: 2,
         accommodation: {

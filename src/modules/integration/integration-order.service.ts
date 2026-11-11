@@ -70,6 +70,13 @@ export class IntegrationOrderService {
         detail: 'La ocupación excede la capacidad de la habitación.',
       });
     }
+    const roomBeds = this.catalog.beds(pricing.room);
+    if (dto.camas !== undefined && roomBeds.numero_camas < dto.camas) {
+      throw new UnprocessableEntityException({
+        code: 'RESTRICTION_VIOLATED',
+        detail: `El tipo de habitación tiene ${roomBeds.numero_camas} cama(s); se pidieron ${dto.camas}.`,
+      });
+    }
     if (
       dto.regimenSeleccionado &&
       dto.regimenSeleccionado !== pricing.room.regimen
@@ -182,6 +189,7 @@ export class IntegrationOrderService {
       alojamientoNombre: pricing.accommodation.nombre,
       tipoHabitacionCodigo: pricing.room.codigo,
       tipoHabitacion: pricing.room.nombre,
+      ...roomBeds,
       cantidadHabitaciones: dto.cantidadHabitaciones,
       ocupantes: dto.ocupantes,
       regimen: dto.regimenSeleccionado ?? pricing.room.regimen,

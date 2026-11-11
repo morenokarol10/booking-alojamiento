@@ -218,19 +218,25 @@ function renderDetails(listing) {
           <span>Total final, sujeto a disponibilidad</span>
         </div>
         <form class="booking-form" id="booking-form">
-          <label>Tipo de habitación
-            <select name="tipoHabitacionCodigo" required>
-              ${roomTypes
+          <label>Habitaciones
+            <input name="cantidadHabitaciones" type="number" min="1" max="10" value="1" required />
+          </label>
+          <label>Camas por habitación
+            <select name="camasMinimas">
+              <option value="0">Cualquier cantidad</option>
+              ${[...new Set(roomTypes.map((room) => Number(room.numero_camas) || 1))]
+                .sort((left, right) => left - right)
                 .map(
-                  (room) =>
-                    `<option value="${escapeHtml(room.codigo)}">${escapeHtml(room.nombre)} · ${Number(room.capacidad_adultos)} ${Number(room.capacidad_adultos) === 1 ? 'adulto' : 'adultos'}</option>`,
+                  (beds) =>
+                    `<option value="${beds}">${beds === 1 ? '1 cama o más' : `${beds} camas o más`}</option>`,
                 )
                 .join('')}
             </select>
           </label>
-          <label>Habitaciones
-            <input name="cantidadHabitaciones" type="number" min="1" max="10" value="1" required />
+          <label class="full-width">Tipo de habitación
+            <select name="tipoHabitacionCodigo" required></select>
           </label>
+          <p id="room-info" class="room-info full-width" aria-live="polite"></p>
           <section id="occupancy" class="occupancy full-width" aria-labelledby="occupancy-title">
             <div class="occupancy-head">
               <h3 id="occupancy-title">Disponibilidad por noche</h3>
@@ -316,6 +322,45 @@ function renderDetails(listing) {
   const guestsInput = form.elements.numHuespedes;
   const submitButton = form.querySelector('button[type="submit"]');
   let quoteRequestNumber = 0;
+  const bedsInput = form.elements.camasMinimas;
+  const roomInfo = dialogContent.querySelector('#room-info');
+
+  function roomOptionLabel(room) {
+    const guests = Number(room.capacidad_adultos);
+    return `${room.nombre} · ${room.camas} · hasta ${guests} ${guests === 1 ? 'huésped' : 'huéspedes'} · ${formatMoney(Number(room.precio_noche), listing.moneda)}/noche`;
+  }
+
+  function renderRoomInfo() {
+    const room = roomTypes.find((item) => item.codigo === roomInput.value);
+    if (!room) {
+      roomInfo.textContent = 'No hay habitaciones con esa cantidad de camas.';
+      return;
+    }
+    const guests = Number(room.capacidad_adultos);
+    roomInfo.innerHTML = `<strong>${escapeHtml(room.nombre)}</strong>: ${escapeHtml(room.camas)}, hasta ${guests} ${guests === 1 ? 'huésped' : 'huéspedes'} por habitación. ${escapeHtml(room.descripcion || '')}`;
+  }
+
+  function renderRoomOptions() {
+    const minimumBeds = Number(bedsInput.value) || 0;
+    const previous = roomInput.value;
+    const visibleRooms = roomTypes.filter(
+      (room) => (Number(room.numero_camas) || 1) >= minimumBeds,
+    );
+    roomInput.replaceChildren(
+      ...visibleRooms.map((room) => {
+        const option = document.createElement('option');
+        option.value = room.codigo;
+        option.textContent = roomOptionLabel(room);
+        return option;
+      }),
+    );
+    if (visibleRooms.some((room) => room.codigo === previous)) {
+      roomInput.value = previous;
+    }
+    renderRoomInfo();
+    return roomInput.value !== previous;
+  }
+  renderRoomOptions();
 
   function setAvailability(state, text) {
     availabilityMessage.dataset.state = state;
@@ -652,10 +697,15 @@ function renderDetails(listing) {
   [startInput, endInput, roomCountInput, guestsInput].forEach((input) =>
     input.addEventListener('change', updateAvailabilityQuote),
   );
-  roomInput.addEventListener('change', () => {
+  function onRoomTypeChanged() {
+    renderRoomInfo();
     calendarNights = new Map();
     void loadCalendar();
     void updateAvailabilityQuote();
+  }
+  roomInput.addEventListener('change', onRoomTypeChanged);
+  bedsInput.addEventListener('change', () => {
+    if (renderRoomOptions()) onRoomTypeChanged();
   });
   form.addEventListener('booking-failed', () => {
     calendarNights = new Map();

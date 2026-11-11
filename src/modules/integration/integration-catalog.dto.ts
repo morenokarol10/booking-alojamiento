@@ -91,6 +91,13 @@ export class IntegrationCatalogQueryDto {
 }
 
 export class IntegrationSearchDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(10)
+  camas?: number;
+
   @IsString()
   @MinLength(2)
   @MaxLength(80)
@@ -183,6 +190,13 @@ export class IntegrationSearchDto {
 }
 
 export class IntegrationAvailabilityDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(10)
+  camas?: number;
+
   @IsString()
   @MaxLength(64)
   alojamientoId!: string;
@@ -221,6 +235,20 @@ export class IntegrationAvailabilityDto {
 }
 
 export class IntegrationPropertyAvailabilityQueryDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(10)
+  camas?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(10)
+  beds?: number;
+
   @IsDateString({ strict: true })
   checkin!: string;
 

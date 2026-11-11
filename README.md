@@ -9,8 +9,8 @@ separa autenticación, alojamientos, reservas y administración; Supabase aporta
 PostgreSQL y Supabase Auth; y el Marketplace y el panel se sirven como recursos
 web estáticos. El enfoque **API-First** se refleja en DTOs validados, contratos
 OpenAPI y controladores REST. El log de eventos de la API anterior no publica a
-un broker; el módulo Alojamientos v2 añade una Outbox transaccional y publica
-actualizaciones de stock a RabbitMQ/CloudAMQP.
+un broker; el módulo Alojamientos v2 añade una Outbox transaccional y sincroniza
+actualizaciones de stock con Booking por REST o, como alternativa, RabbitMQ.
 
 > **Alcance:** Alojamientos v2 se implementa como módulo NestJS dentro de este
 > repositorio; no es una aplicación independiente ni el servicio Booking de
@@ -137,19 +137,30 @@ del proyecto, `SUPABASE_KEY` con la clave publicable/anon para autenticación y
 `SUPABASE_SERVICE_ROLE_KEY` con la clave de servidor para operaciones
 administrativas. Ambas claves son requeridas; nunca expongas la service-role
 key al navegador. Añade también `NODE_ID`, `OAUTH_JWKS_URL`, `OAUTH_ISSUER`,
-`OAUTH_AUDIENCE`, `RABBITMQ_URL` (URI `amqps://` de CloudAMQP),
-`EVENT_BUS_MODE=rabbitmq`, `RABBITMQ_EXCHANGE=booking.events`,
-`RABBITMQ_ROUTING_KEY=stock.updated` y `INVENTORY_SERVICE_ID=NODE_ALO_<SIGLAS>`.
-Configura `API_KEY` solo como credencial transitoria; las integraciones nuevas
-deben usar OAuth2 Client Credentials con los scopes del contrato. Guarda
-secretos y configuración privada en Azure Configuration y en GitHub Secrets,
-nunca en el repositorio ni en el paquete ZIP.
+`OAUTH_AUDIENCE`, `STOCK_SYNC_MODE=rest`,
+`BOOKING_REST_STOCK_URL=https://booking-core-api.azurewebsites.net/api/v3/inventory/stock`
+y la `API_KEY` registrada por Booking. En este modo, el despachador toma la
+Outbox transaccional y envía a Booking una instantánea JSON por tipo de
+habitación y noche; solo marca el evento entregado tras recibir HTTP 2xx. Los
+fallos y timeouts se registran y quedan sujetos al reintento de la Outbox.
+`X-API-Key` se envía únicamente desde el backend por HTTPS; nunca registres el
+secreto en el repositorio, cliente web ni ZIP.
+
+Como alternativa, configura `STOCK_SYNC_MODE=rabbitmq`,
+`RABBITMQ_URL` (URI `amqps://` de CloudAMQP),
+`RABBITMQ_EXCHANGE=booking.events`, `RABBITMQ_ROUTING_KEY=stock.updated` e
+`INVENTORY_SERVICE_ID=NODE_ALO_<SIGLAS>`. Selecciona solo un canal de stock
+para evitar duplicar actualizaciones. `EVENT_BUS_MODE` se conserva como valor
+de compatibilidad si no se define `STOCK_SYNC_MODE`. Guarda secretos y
+configuración privada en Azure Configuration y en GitHub Secrets, nunca en
+el repositorio ni en el paquete ZIP.
 
 La migración `202611080001_alojamientos_v2_core.sql` ya fue aplicada en el
 proyecto Supabase que se usará; no la ejecutes de nuevo. El workflow de GitHub
 no ejecuta SQL ni modifica la base. Configura el Health check de App Service en
 `/api/v2/alojamientos/health`; la aplicación necesita acceso de salida a
-Supabase y CloudAMQP. Si falta `RABBITMQ_URL`, los eventos quedan en la Outbox y
+Supabase y al canal de stock seleccionado. Si falta la configuración de ese
+canal o Booking rechaza una actualización, los eventos quedan en la Outbox y
 se informa en los logs.
 
 El inicio de sesión de Azure CLI y la suscripción `Azure for Students` están
@@ -194,7 +205,7 @@ servicio remoto esté disponible.
 | 5 | Base de datos en la nube (Supabase/PostgreSQL) | **Esquema y acceso implementados**; conexión de producción no verificada; 3FN estricta no acreditada | [database/schema.sql](./database/schema.sql), migraciones de [database/migrations/](./database/migrations/) |
 | 6 | Diseño API-First y preparación para integración | **Implementado para los flujos prioritarios v2**; el usuario reporta la migración aplicada, pendiente verificar el esquema y conectividad | [contrato](./contracts/alojamientos-openapi-v2.yaml), [módulos de integración](./src/modules/integration/) |
 | 7 | Contratos y endpoints para interoperabilidad | **Implementados en código**: salud, catálogo, búsqueda, cotización, órdenes idempotentes, eventos y snapshot de inventario; operación externa no verificada | [controladores v2](./src/modules/integration/), [OpenAPI GDS](./contracts/alojamientos-openapi-v2.yaml) |
-| 8 | Diseño preliminar EDA o registro de eventos | **Outbox transaccional y publicación confirmada de stock a RabbitMQ implementados en código**; CloudAMQP y cola consumidora de Booking aún deben configurarse y probarse | [migración v2](./database/migrations/202611080001_alojamientos_v2_core.sql), [servicio RabbitMQ](./src/modules/integration/integration-stock-sync.service.ts) |
+| 8 | Diseño preliminar EDA o registro de eventos | **Outbox transaccional y sincronización de stock REST/AMQP implementados en código**; credenciales, despliegue y recepción de Booking aún deben configurarse y probarse | [migración v2](./database/migrations/202611080001_alojamientos_v2_core.sql), [servicio de stock](./src/modules/integration/integration-stock-sync.service.ts) |
 | 9 | Documentación técnica mínima | **Cumple**: arquitectura, modelo, rutas, ejecución y despliegue están documentados | Este README, [schema SQL](./database/schema.sql), contratos OpenAPI |
 | 10 | Dominio del código por parte del estudiante | **Evidencia para sustentar**: decisiones y flujos están descritos; debe demostrarse en la defensa | Secciones de arquitectura, seguridad, datos y eventos de este README |
 
@@ -206,8 +217,8 @@ servicio remoto esté disponible.
    prefijo `/api/v2/alojamientos`; incluyen salud, catálogo, búsqueda,
    cotización, creación/cancelación idempotentes, feed de eventos y snapshot
    de inventario. La operación real requiere la migración v2, credenciales
-   OAuth/API key y RabbitMQ configurados. El contrato propio del producto es
-   [booking-ec-project.openapi.yaml](./contracts/booking-ec-project.openapi.yaml);
+   OAuth/API key y un canal de stock configurado. El contrato propio del producto
+   es [booking-ec-project.openapi.yaml](./contracts/booking-ec-project.openapi.yaml);
    NestJS toma de este el título, la descripción, la versión y las etiquetas
    para Swagger, y genera las operaciones runtime desde los controladores.
    Son contratos distintos y no se declara que la API local implemente el GDS.
@@ -228,9 +239,9 @@ servicio remoto esté disponible.
 4. El pago es una simulación local. No hay cobro real ni integración con
    pasarela de pagos.
 5. El flujo anterior `/api/v1/reservas` conserva un log de eventos separado.
-   Las órdenes v2 usan una Outbox PostgreSQL en la misma transacción; la entrega
-   RabbitMQ es asíncrona y requiere configurar CloudAMQP y el binding de la
-   cola de Booking.
+   Las órdenes v2 usan una Outbox PostgreSQL en la misma transacción. La entrega
+   puede ser REST a Booking Core o AMQP con CloudAMQP; selecciona solo un canal
+   y configura sus credenciales en el entorno de ejecución.
 
 ## 3. Rutas principales
 
@@ -247,7 +258,7 @@ servicio remoto esté disponible.
 | Cotización v2 | `POST /api/v2/alojamientos/availability` | Precio congelado durante 30 minutos, sin retener inventario. |
 | Saga de reservas v2 | `POST /api/v2/alojamientos/orders/create`, `POST /api/v2/alojamientos/orders/{orderId}/cancel` | Creación y compensación idempotentes con sincronización de inventario. |
 | Check-in presencial | `POST /api/v1/reservas/{external_order_id}/checkin` | Desde el panel, el backend envía el huésped real a Booking Core; la API key no se expone al navegador. |
-| Interoperabilidad de stock | RabbitMQ/CloudAMQP, exchange `booking.events`, routing key `stock.updated` | Outbox transaccional con mensajes persistentes, publisher confirms y reintentos. |
+| Interoperabilidad de stock | Booking Core remoto: `POST /api/v3/inventory/stock`; alternativa RabbitMQ/CloudAMQP | Outbox transaccional, snapshots por habitación/noche, autenticación `X-API-Key`, manejo de fallos y reintentos. |
 | Recuperación e inventario | `GET /api/v2/alojamientos/eventos`, `GET /api/v2/alojamientos/{id}/inventario` | Feed CloudEvents y snapshot con hash para reconciliación. |
 | Swagger/OpenAPI combinado | `/api/docs` | Documentación del contrato de integración y de la API del producto. |
 | Swagger de NestJS | `/api/project-docs` | Documentación generada desde controladores NestJS. |
@@ -654,10 +665,12 @@ evento `ReservaRealizadaEvent` en `eventos_log`. El payload contiene
 consulta ese registro para monitorear el flujo.
 
 El flujo de órdenes v2 escribe reserva y Outbox dentro de la misma transacción
-PostgreSQL y un dispatcher publica stock a RabbitMQ con publisher confirms y
-reintentos. La integración externa depende de que Booking cree una cola durable,
-la vincule a `booking.events` con la routing key `stock.updated`, y deduplique
-mensajes por `messageId` si se reintenta después de una confirmación ambigua.
+PostgreSQL. El dispatcher publica cada snapshot por REST sobre HTTPS o, si se
+elige AMQP, con publisher confirms; en ambos casos conserva eventos fallidos
+para reintentos. La integración AMQP depende de que Booking cree una cola
+durable, la vincule a `booking.events` con la routing key `stock.updated`, y
+deduplique mensajes por `messageId` si se reintenta después de una confirmación
+ambigua.
 El registro anterior `/api/v1/reservas` conserva su propio `eventos_log` y no
 usa esta Outbox.
 
@@ -756,11 +769,13 @@ ADMIN_SEED_PASSWORD=una-clave-local-segura-de-al-menos-12-caracteres
 PORT=3000
 NODE_ID=alojamientos
 API_KEY=una-clave-aleatoria-transitoria
+BOOKING_CORE_API_URL=https://booking-core-api.azurewebsites.net
+BOOKING_REST_STOCK_URL=https://booking-core-api.azurewebsites.net/api/v3/inventory/stock
+STOCK_SYNC_MODE=rest
 OAUTH_JWKS_URL=https://identity.example/.well-known/jwks.json
 OAUTH_ISSUER=https://identity.example/
 OAUTH_AUDIENCE=alojamientos
 RABBITMQ_URL=
-EVENT_BUS_MODE=rabbitmq
 RABBITMQ_EXCHANGE=booking.events
 RABBITMQ_ROUTING_KEY=stock.updated
 INVENTORY_SERVICE_ID=NODE_ALO_SIGLAS
@@ -770,9 +785,12 @@ No agregues `.env` al repositorio. `SUPABASE_KEY` es para los flujos de Auth;
 `SUPABASE_SERVICE_ROLE_KEY` solo se usa por el servidor y script de seeding.
 No compartas ni envíes credenciales por chat; en Azure se configuran directamente
 en Application Settings. `API_KEY` autentica la integración entrante y el
-backend la envía como `X-API-Key` en el check-in saliente a Booking Core.
-`BOOKING_CORE_API_URL` puede reemplazar el host remoto; por defecto es
-`https://booking-core-api.azurewebsites.net`.
+backend la envía como `X-API-Key` en el check-in y, cuando se selecciona REST,
+en la sincronización de stock saliente a Booking Core. `BOOKING_CORE_API_URL`
+puede reemplazar el host remoto del check-in; por defecto es
+`https://booking-core-api.azurewebsites.net`. Para stock usa
+`STOCK_SYNC_MODE=rest` y configura la clave que Booking haya registrado para
+este nodo. La alternativa CloudAMQP requiere `STOCK_SYNC_MODE=rabbitmq`.
 
 ### Preparar base y arrancar
 

@@ -51,7 +51,7 @@ export class IntegrationCatalogService {
     const { data, error } = await this.supabase
       .from('tipos_habitacion')
       .select(
-        'id,codigo,nombre,capacidad_maxima,habitaciones_totales,precio_base_noche,regimen,activo',
+        'id,codigo,nombre,descripcion,capacidad_maxima,numero_camas,camas,habitaciones_totales,precio_base_noche,regimen,activo',
       )
       .eq('alojamiento_id', accommodation.id)
       .eq('activo', true)
@@ -65,9 +65,12 @@ export class IntegrationCatalogService {
     return (data ?? []).map((room) => ({
       codigo: String(room.codigo),
       nombre: String(room.nombre),
+      descripcion:
+        typeof room.descripcion === 'string' ? room.descripcion : null,
       cantidad: Number(room.habitaciones_totales),
       capacidad_adultos: Number(room.capacidad_maxima),
       capacidad_ninos: 0,
+      ...this.beds(room),
       precio_noche: this.money(String(room.precio_base_noche)),
       regimen: String(room.regimen),
       cancelacion_gratuita_horas: 48,
@@ -81,12 +84,13 @@ export class IntegrationCatalogService {
     const roomsRequested = query.habitaciones ?? query.rooms ?? 1;
     const adultsRequested = query.adultos ?? query.adults ?? 2;
     const childrenRequested = query.ninos ?? query.children ?? 0;
+    const bedsRequested = query.camas ?? query.beds;
     const nights = this.nights(query.checkin, query.checkout);
     const accommodation = await this.findByIntegrationCode(id);
     const { data: rooms, error: roomsError } = await this.supabase
       .from('tipos_habitacion')
       .select(
-        'id,codigo,nombre,capacidad_maxima,habitaciones_totales,precio_base_noche,regimen,activo',
+        'id,codigo,nombre,descripcion,capacidad_maxima,numero_camas,camas,habitaciones_totales,precio_base_noche,regimen,activo',
       )
       .eq('alojamiento_id', accommodation.id)
       .eq('activo', true)
@@ -101,12 +105,21 @@ export class IntegrationCatalogService {
       id: string;
       codigo: string;
       nombre: string;
+      capacidad_adultos: number;
+      numero_camas: number;
+      camas: string;
       precio_noche: string;
       total_rooms: number;
       available_rooms: number;
     }> = [];
     for (const room of rooms ?? []) {
       if (query.tipoHabitacion && room.codigo !== query.tipoHabitacion) {
+        continue;
+      }
+      if (
+        bedsRequested !== undefined &&
+        this.beds(room).numero_camas < bedsRequested
+      ) {
         continue;
       }
       if (
@@ -166,6 +179,8 @@ export class IntegrationCatalogService {
         id: String(room.id),
         codigo: String(room.codigo),
         nombre: String(room.nombre),
+        capacidad_adultos: Number(room.capacidad_maxima),
+        ...this.beds(room),
         precio_noche: price.precioNoche,
         total_rooms: total,
         available_rooms: available,
@@ -514,7 +529,7 @@ export class IntegrationCatalogService {
         ? await this.supabase
             .from('tipos_habitacion')
             .select(
-              'id,alojamiento_id,codigo,capacidad_maxima,habitaciones_totales,precio_base_noche,regimen,activo',
+              'id,alojamiento_id,codigo,nombre,capacidad_maxima,numero_camas,camas,habitaciones_totales,precio_base_noche,regimen,activo',
             )
             .in('alojamiento_id', resultIds)
             .eq('activo', true)
@@ -532,7 +547,9 @@ export class IntegrationCatalogService {
               room.alojamiento_id === row.id &&
               Number(room.capacidad_maxima) * request.habitaciones >=
                 request.adultos + request.ninos &&
-              (!request.regimen || room.regimen === request.regimen),
+              (!request.regimen || room.regimen === request.regimen) &&
+              (request.camas === undefined ||
+                this.beds(room).numero_camas >= request.camas),
           )
           .sort(
             (left, right) =>
@@ -610,6 +627,12 @@ export class IntegrationCatalogService {
     const results = await Promise.all(
       matching.map(async ({ row, room, priceTotal }) => ({
         ...this.toCard(row),
+        habitacionSugerida: {
+          codigo: String(room.codigo),
+          nombre: String(room.nombre),
+          capacidad_adultos: Number(room.capacidad_maxima),
+          ...this.beds(room),
+        },
         precioTotalEstancia:
           priceTotal ??
           (
@@ -661,7 +684,7 @@ export class IntegrationCatalogService {
     const { data: room, error: roomError } = await this.supabase
       .from('tipos_habitacion')
       .select(
-        'id,codigo,nombre,capacidad_maxima,habitaciones_totales,precio_base_noche,moneda,plan_tarifa_codigo,regimen',
+        'id,codigo,nombre,capacidad_maxima,numero_camas,camas,habitaciones_totales,precio_base_noche,moneda,plan_tarifa_codigo,regimen',
       )
       .eq('alojamiento_id', accommodation.id)
       .eq('codigo', input.roomCode)
@@ -719,7 +742,7 @@ export class IntegrationCatalogService {
     const { data: room, error: roomError } = await this.supabase
       .from('tipos_habitacion')
       .select(
-        'id,codigo,nombre,capacidad_maxima,habitaciones_totales,precio_base_noche,moneda,plan_tarifa_codigo,regimen',
+        'id,codigo,nombre,capacidad_maxima,numero_camas,camas,habitaciones_totales,precio_base_noche,moneda,plan_tarifa_codigo,regimen',
       )
       .eq('alojamiento_id', accommodation.id)
       .eq('codigo', dto.tipoHabitacionCodigo)
@@ -734,6 +757,12 @@ export class IntegrationCatalogService {
       throw new NotFoundException({
         code: 'NOT_FOUND',
         detail: 'No se encontró el tipo de habitación solicitado.',
+      });
+    }
+    if (dto.camas !== undefined && this.beds(room).numero_camas < dto.camas) {
+      throw new UnprocessableEntityException({
+        code: 'RESTRICTION_VIOLATED',
+        detail: `El tipo de habitación tiene ${this.beds(room).numero_camas} cama(s); se pidieron ${dto.camas}.`,
       });
     }
     if (
@@ -842,6 +871,8 @@ export class IntegrationCatalogService {
     return {
       alojamientoId: dto.alojamientoId,
       tipoHabitacionCodigo: room.codigo,
+      tipoHabitacion: room.nombre,
+      ...this.beds(room),
       estaDisponible: available,
       habitacionesRemanentes: remaining,
       nochesEstancia: nights,
@@ -1004,6 +1035,19 @@ export class IntegrationCatalogService {
     const result = new Date(`${date}T00:00:00Z`);
     result.setUTCDate(result.getUTCDate() + days);
     return result.toISOString().slice(0, 10);
+  }
+
+  /** Camas del tipo de habitación (contrato: `camas` texto; `numero_camas` aditivo). */
+  beds(room: DatabaseRow): { numero_camas: number; camas: string } {
+    const count = Number(room.numero_camas);
+    const numero = Number.isInteger(count) && count > 0 ? count : 1;
+    return {
+      numero_camas: numero,
+      camas:
+        typeof room.camas === 'string' && room.camas.trim()
+          ? room.camas
+          : `${numero} ${numero === 1 ? 'cama' : 'camas'}`,
+    };
   }
 
   private escapeLike(value: string): string {

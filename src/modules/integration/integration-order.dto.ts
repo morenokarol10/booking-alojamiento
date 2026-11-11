@@ -162,6 +162,14 @@ export class IntegrationOrderCreateDto {
   @Max(10)
   cantidadHabitaciones = 1;
 
+  /** Camas mínimas por habitación que pide el huésped (opcional). */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(10)
+  camas?: number;
+
   @ValidateNested()
   @Type(() => IntegrationOccupantsDto)
   ocupantes!: IntegrationOccupantsDto;

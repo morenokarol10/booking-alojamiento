@@ -92,7 +92,11 @@ describe('ReservationsService payment and event flow', () => {
       'PGRST204',
       '202612120001_unified_marketplace_inventory.sql',
     ],
-    ['tipo_habitacion_id', '42703', '202612120001_unified_marketplace_inventory.sql'],
+    [
+      'tipo_habitacion_id',
+      '42703',
+      '202612120001_unified_marketplace_inventory.sql',
+    ],
   ])(
     'explains how to repair Supabase when %s is missing',
     async (column, code, migration) => {
@@ -292,7 +296,9 @@ describe('ReservationsService payment and event flow', () => {
       },
       idempotencyKey,
     );
-    expect(replayResponse.message).toMatch(/solicitud ya había sido procesada/i);
+    expect(replayResponse.message).toMatch(
+      /solicitud ya había sido procesada/i,
+    );
     expect(inserts.eventos_log).toHaveLength(1);
   });
 
@@ -357,51 +363,58 @@ describe('ReservationsService payment and event flow', () => {
     });
   });
 
-  it('cancels a future reservation owned by the customer and records a simulated refund', async () => {
-    const customerId = '50000000-0000-4000-8000-000000000001';
-    const reservationId = '40000000-0000-4000-8000-000000000001';
-    const updateValues: unknown[] = [];
-    const eventInserts: unknown[] = [];
-    let reservationQueryCount = 0;
-    const updatedReservation = {
+  const cancelledRow = (reservationId: string) => ({
+    id: reservationId,
+    alojamiento_id: '10000000-0000-4000-8000-000000000001',
+    cliente_nombre: 'María Pérez',
+    cliente_email: 'maria@example.com',
+    cliente_telefono: '+593991234567',
+    fecha_checkin: '2099-11-10',
+    fecha_checkout: '2099-11-13',
+    num_huespedes: 2,
+    precio_total: 255,
+    moneda: 'USD',
+    metodo_pago_simulado: 'tarjeta',
+    pago_estado: 'exitoso',
+    pago_referencia: '30000000-0000-4000-8000-000000000001',
+    estado: 'cancelada',
+    estado_integracion: 'CANCELLED',
+    cancelada_por: 'CLIENTE',
+    porcentaje_reembolso: 100,
+    monto_reembolsado: 255,
+    created_at: '2026-10-07T00:00:00.000Z',
+  });
+
+  const cancellationStub = (
+    reservationId: string,
+    rpcResult: QueryResult,
+    ownerLookup: unknown = {
       id: reservationId,
-      alojamiento_id: '10000000-0000-4000-8000-000000000001',
-      cliente_nombre: 'María Pérez',
-      cliente_email: 'maria@example.com',
-      cliente_telefono: '+593991234567',
+      estado: 'confirmada',
       fecha_checkin: '2099-11-10',
-      fecha_checkout: '2099-11-13',
-      num_huespedes: 2,
-      precio_total: 255,
-      moneda: 'USD',
-      metodo_pago_simulado: 'tarjeta',
-      pago_estado: 'exitoso',
-      pago_referencia: '30000000-0000-4000-8000-000000000001',
-      estado: 'cancelada',
-      created_at: '2026-10-07T00:00:00.000Z',
-    };
-    const supabaseStub = {
+    },
+  ) => {
+    const rpcCalls: Array<[string, Record<string, unknown>]> = [];
+    const updates: unknown[] = [];
+    const eventInserts: unknown[] = [];
+    let reservationQueries = 0;
+    const supabase = {
+      rpc: (name: string, args: Record<string, unknown>) => {
+        rpcCalls.push([name, args]);
+        return Promise.resolve(rpcResult);
+      },
       from: (table: string) => {
         if (table === 'reservas') {
-          reservationQueryCount += 1;
-          if (reservationQueryCount === 1) {
-            return new QueryMock(
-              {
-                data: {
-                  id: reservationId,
-                  estado: 'confirmada',
-                  fecha_checkin: '2099-11-10',
-                },
-                error: null,
-              },
-              () => ({ data: null, error: null }),
-            );
-          }
+          reservationQueries += 1;
+          const isOwnerLookup = reservationQueries === 1 && ownerLookup;
           return new QueryMock(
-            { data: updatedReservation, error: null },
+            {
+              data: isOwnerLookup ? ownerLookup : cancelledRow(reservationId),
+              error: null,
+            },
             (value) => {
-              updateValues.push(value);
-              return { data: updatedReservation, error: null };
+              updates.push(value);
+              return { data: null, error: null };
             },
           );
         }
@@ -416,35 +429,122 @@ describe('ReservationsService payment and event flow', () => {
         throw new Error(`Unexpected Supabase table: ${table}`);
       },
     } as unknown as SupabaseClient;
-    const service = createService(supabaseStub);
+    return { supabase, rpcCalls, updates, eventInserts };
+  };
+
+  const refundResult = (percent: number, amount: string): QueryResult => ({
+    data: {
+      orderId: '40000000-0000-4000-8000-000000000001',
+      estado: 'CANCELLED',
+      porcentajeReembolso: percent,
+      montoReembolsado: amount,
+      penalidad: percent === 100 ? '0.00' : '255.00',
+      codigoReembolso: 'REF-HTL-10001',
+      yaCancelada: false,
+    },
+    error: null,
+  });
+
+  it('cancels a customer reservation through the shared cancellation policy', async () => {
+    const customerId = '50000000-0000-4000-8000-000000000001';
+    const reservationId = '40000000-0000-4000-8000-000000000001';
+    const { supabase, rpcCalls, eventInserts } = cancellationStub(
+      reservationId,
+      refundResult(100, '255.00'),
+    );
+    const service = createService(supabase);
 
     const response = await service.cancel(
       reservationId,
       { confirmacionPagoSimulado: true },
-      {
-        id: customerId,
-        email: 'maria@example.com',
-        role: 'cliente',
-      },
+      { id: customerId, email: 'maria@example.com', role: 'cliente' },
     );
 
-    expect(updateValues).toEqual([{ estado: 'cancelada' }]);
+    expect(rpcCalls[0][0]).toBe('cancel_alojamiento_order_v2');
+    expect(rpcCalls[0][1]).toMatchObject({
+      p_order_ref: reservationId,
+      p_requested_by: 'CLIENTE',
+    });
     expect(eventInserts[0]).toMatchObject({
       tipo_evento: 'ReservaCanceladaEvent',
       payload: {
-        eventType: 'ReservaCanceladaEvent',
         data: {
           reservaId: reservationId,
-          clienteId: customerId,
-          pagoCancelacion: { estado: 'simulado' },
+          canceladaPor: 'CLIENTE',
+          usuarioId: customerId,
+          porcentajeReembolso: 100,
         },
       },
     });
     expect(JSON.stringify(eventInserts)).not.toMatch(/cardNumber|cvc|4242/);
     expect(response).toMatchObject({
       data: { id: reservationId, estado: 'cancelada' },
+      cancelacion: { porcentajeReembolso: 100, montoReembolsado: '255.00' },
       pagoCancelacion: { estado: 'simulado', simulado: true },
     });
+  });
+
+  it('lets staff cancel on behalf of the guest applying the refund policy and saving the reason', async () => {
+    const reservationId = '40000000-0000-4000-8000-000000000001';
+    const { supabase, rpcCalls, updates } = cancellationStub(
+      reservationId,
+      refundResult(0, '0.00'),
+      null,
+    );
+    const service = createService(supabase);
+
+    const response = await service.cancelByStaff(
+      reservationId,
+      { solicitadoPor: 'HUESPED', motivo: 'El huésped llamó para cancelar.' },
+      {
+        id: '60000000-0000-4000-8000-000000000001',
+        email: 'recepcion@example.com',
+        role: 'empleado',
+      },
+    );
+
+    expect(rpcCalls[0][1]).toMatchObject({ p_requested_by: 'ADMIN' });
+    expect(updates).toContainEqual({
+      motivo_cancelacion: 'El huésped llamó para cancelar.',
+    });
+    expect(response.message).toMatch(/no aplica reembolso/i);
+  });
+
+  it('refunds in full when the hotel cancels', async () => {
+    const reservationId = '40000000-0000-4000-8000-000000000001';
+    const { supabase, rpcCalls } = cancellationStub(
+      reservationId,
+      refundResult(100, '255.00'),
+      null,
+    );
+    const service = createService(supabase);
+
+    const response = await service.cancelByStaff(
+      reservationId,
+      { solicitadoPor: 'HOTEL', motivo: 'Mantenimiento de la habitación.' },
+      { id: 'admin-id', email: 'admin@example.com', role: 'admin' },
+    );
+
+    expect(rpcCalls[0][1]).toMatchObject({ p_requested_by: 'HOTEL' });
+    expect(response.cancelacion.porcentajeReembolso).toBe(100);
+  });
+
+  it('refuses to cancel a reservation that already checked in', async () => {
+    const reservationId = '40000000-0000-4000-8000-000000000001';
+    const { supabase } = cancellationStub(
+      reservationId,
+      { data: null, error: { message: 'INVALID_STATE_TRANSITION' } },
+      null,
+    );
+    const service = createService(supabase);
+
+    await expect(
+      service.cancelByStaff(
+        reservationId,
+        { solicitadoPor: 'HUESPED', motivo: 'Cambio de planes.' },
+        { id: 'admin-id', email: 'admin@example.com', role: 'admin' },
+      ),
+    ).rejects.toThrow(/check-in o check-out/i);
   });
 
   it('does not reveal or cancel a reservation that does not belong to the customer', async () => {

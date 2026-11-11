@@ -20,6 +20,8 @@ describe('IntegrationCatalogService property endpoints', () => {
     codigo: 'HABITACION_ESTANDAR',
     nombre: 'Habitación estándar',
     capacidad_maxima: 4,
+    numero_camas: 2,
+    camas: '2 camas matrimoniales',
     habitaciones_totales: 3,
     precio_base_noche: '85.00',
     regimen: 'SOLO_HABITACION',
@@ -112,9 +114,12 @@ describe('IntegrationCatalogService property endpoints', () => {
       {
         codigo: 'HABITACION_ESTANDAR',
         nombre: 'Habitación estándar',
+        descripcion: null,
         cantidad: 3,
         capacidad_adultos: 4,
         capacidad_ninos: 0,
+        numero_camas: 2,
+        camas: '2 camas matrimoniales',
         precio_noche: '85.00',
         regimen: 'SOLO_HABITACION',
         cancelacion_gratuita_horas: 48,
@@ -145,6 +150,9 @@ describe('IntegrationCatalogService property endpoints', () => {
           id: 'room-uuid',
           codigo: 'HABITACION_ESTANDAR',
           nombre: 'Habitación estándar',
+          capacidad_adultos: 4,
+          numero_camas: 2,
+          camas: '2 camas matrimoniales',
           precio_noche: '85.00',
           total_rooms: 3,
           available_rooms: 2,
@@ -160,5 +168,28 @@ describe('IntegrationCatalogService property endpoints', () => {
         p_fecha_fin: '2099-01-22',
       }),
     );
+  });
+
+  it('filters room types that have fewer beds than requested', async () => {
+    const { service } = createService();
+
+    const result = await service.propertyAvailability('HTL-QUITO-C62FE3F1', {
+      checkin: '2099-01-20',
+      checkout: '2099-01-22',
+      habitaciones: 1,
+      adultos: 2,
+      camas: 3,
+    });
+    expect(result.tipos).toEqual([]);
+    expect(result.available_rooms).toBe(0);
+  });
+
+  it('exposes a readable bed description even when only the count exists', () => {
+    const { service } = createService();
+    expect(service.beds({ numero_camas: 2 })).toEqual({
+      numero_camas: 2,
+      camas: '2 camas',
+    });
+    expect(service.beds({})).toEqual({ numero_camas: 1, camas: '1 cama' });
   });
 });

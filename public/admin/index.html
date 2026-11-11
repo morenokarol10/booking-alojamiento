@@ -37,7 +37,7 @@
           <span class="nav-icon" aria-hidden="true">⌂</span> Alojamientos
           <span class="nav-count" id="nav-listing-count">—</span>
         </a>
-        <a class="side-link admin-only" href="#bookings">
+        <a class="side-link" href="#bookings">
           <span class="nav-icon" aria-hidden="true">▤</span> Reservas
           <span class="nav-count" id="nav-booking-count">—</span>
         </a>
@@ -300,7 +300,7 @@
         </section>
 
         <section
-          class="data-section admin-only"
+          class="data-section"
           id="bookings"
           aria-labelledby="bookings-title"
         >
@@ -633,6 +633,75 @@
         </div>
         <div class="modal-error" id="delete-error" role="alert" hidden></div>
       </div>
+    </dialog>
+    <dialog
+      class="confirm-dialog cancel-booking-dialog"
+      id="cancel-booking-dialog"
+      aria-labelledby="cancel-booking-title"
+      aria-describedby="cancel-booking-summary"
+    >
+      <form class="confirm-content cancel-booking-form" id="cancel-booking-form" novalidate>
+        <button
+          class="icon-close"
+          type="button"
+          data-close="cancel-booking-dialog"
+          aria-label="Cerrar sin cancelar"
+        >
+          ×
+        </button>
+        <span class="confirm-icon" aria-hidden="true">!</span>
+        <h2 id="cancel-booking-title">Cancelar reserva</h2>
+        <p id="cancel-booking-summary" class="cancel-booking-summary"></p>
+
+        <fieldset class="cancel-source">
+          <legend>¿Quién solicita la cancelación?</legend>
+          <label>
+            <input type="radio" name="solicitadoPor" value="HUESPED" checked />
+            <span>
+              <strong>El huésped</strong>
+              <small>Se aplica la política: reembolso 100 % hasta 48 h antes del check-in (14:00); después, sin reembolso.</small>
+            </span>
+          </label>
+          <label>
+            <input type="radio" name="solicitadoPor" value="HOTEL" />
+            <span>
+              <strong>El hotel</strong>
+              <small>Cancelación por causa del hotel (sobreventa, mantenimiento…): reembolso del 100 %.</small>
+            </span>
+          </label>
+        </fieldset>
+
+        <div class="cancel-policy-result" id="cancel-policy-result" role="status" aria-live="polite"></div>
+
+        <label class="form-field cancel-reason">
+          <span>Motivo de la cancelación <small>(obligatorio, queda registrado)</small></span>
+          <textarea
+            name="motivo"
+            rows="3"
+            minlength="3"
+            maxlength="300"
+            required
+            placeholder="Ej.: El huésped llamó porque no podrá viajar."
+          ></textarea>
+        </label>
+
+        <div class="confirm-actions">
+          <button
+            class="button button-light"
+            type="button"
+            data-close="cancel-booking-dialog"
+          >
+            Volver</button
+          ><button
+            class="button button-danger"
+            id="confirm-cancel-booking"
+            type="submit"
+          >
+            Sí, cancelar reserva
+          </button>
+        </div>
+        <div class="modal-error" id="cancel-booking-error" role="alert" hidden></div>
+      </form>
     </dialog>
     <div
       class="toast"

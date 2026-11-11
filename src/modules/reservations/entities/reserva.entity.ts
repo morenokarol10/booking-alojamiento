@@ -99,6 +99,25 @@ export class ReservaEntity {
   @ApiPropertyOptional({ format: 'uuid', nullable: true })
   cotizacionId?: string | null;
 
+  @ApiPropertyOptional({
+    nullable: true,
+    enum: ['CLIENTE', 'ADMIN', 'HOTEL', 'SAGA_ORCHESTRATOR'],
+    description: 'Quién canceló la reserva.',
+  })
+  canceladaPor?: string | null;
+
+  @ApiPropertyOptional({ format: 'date-time', nullable: true })
+  canceladaEn?: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  motivoCancelacion?: string | null;
+
+  @ApiPropertyOptional({ nullable: true, minimum: 0, maximum: 100 })
+  porcentajeReembolso?: number | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  montoReembolsado?: number | null;
+
   @ApiPropertyOptional({ type: ReservaAlojamientoEntity })
   alojamiento?: ReservaAlojamientoEntity;
 

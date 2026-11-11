@@ -1443,3 +1443,18 @@ select:focus-visible {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Resumen del tipo de habitación elegido (camas y capacidad) */
+.room-info {
+  margin: -4px 0 0;
+  padding: 10px 12px;
+  border-left: 3px solid var(--green);
+  border-radius: 0 7px 7px 0;
+  background: var(--sage);
+  color: #2f3d34;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.room-info:empty {
+  display: none;
+}

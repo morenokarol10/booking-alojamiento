@@ -133,6 +133,7 @@ function renderListings(listings) {
               <span class="rating" aria-label="Alojamiento destacado"><span aria-hidden="true">★</span> 4.9</span>
             </div>
             <p class="card-location">${escapeHtml(listing.ciudad)}</p>
+            ${cardRoomsSummary(listing)}
             <div class="card-price"><strong>${formatMoney(listing.precioBaseNoche, listing.moneda)}</strong><span>/ noche</span></div>
           </div>
         </article>`,
@@ -191,6 +192,13 @@ function isFutureMonth(value) {
   );
 }
 
+function cardRoomsSummary(listing) {
+  const rooms = (listing.tiposHabitacion || []).filter((room) => room.cantidad > 0);
+  if (!rooms.length) return '';
+  const total = rooms.reduce((sum, room) => sum + room.cantidad, 0);
+  return `<p class="card-rooms">${total} ${total === 1 ? 'habitación' : 'habitaciones'} · ${rooms.length} ${rooms.length === 1 ? 'tipo' : 'tipos'}</p>`;
+}
+
 function renderDetails(listing) {
   const roomTypes = listing.roomTypes || [];
   const firstRoom = roomTypes[0];
@@ -212,6 +220,43 @@ function renderDetails(listing) {
       <p class="detail-description">${escapeHtml(listing.descripcion || 'Un espacio acogedor para disfrutar tu próxima escapada.')}</p>
       <p class="detail-description">${escapeHtml(listing.servicios?.join(' · ') || '')}</p>
       <p class="detail-description">${escapeHtml(listing.politicaCancelacion || '')}</p>
+      <section class="rooms-overview" aria-labelledby="rooms-overview-title">
+        <div class="rooms-overview-head">
+          <h3 id="rooms-overview-title">Habitaciones</h3>
+          <span>${roomTypes.reduce((sum, room) => sum + Number(room.cantidad || 0), 0)} habitaciones en ${roomTypes.length} ${roomTypes.length === 1 ? 'tipo' : 'tipos'}</span>
+        </div>
+        <div class="rooms-table-wrap">
+          <table class="rooms-table">
+            <thead>
+              <tr>
+                <th scope="col">Tipo</th>
+                <th scope="col">Camas por habitación</th>
+                <th scope="col">Huéspedes</th>
+                <th scope="col">Habitaciones</th>
+                <th scope="col">Libres en tus fechas</th>
+                <th scope="col">Precio / noche</th>
+                <th scope="col"><span class="visually-hidden">Elegir</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              ${roomTypes
+                .map(
+                  (room) => `
+                <tr data-room-code="${escapeHtml(room.codigo)}">
+                  <th scope="row">${escapeHtml(room.nombre)}${room.descripcion ? `<small>${escapeHtml(room.descripcion)}</small>` : ''}</th>
+                  <td>${escapeHtml(room.descripcion_camas || `${Number(room.camas) || 1} cama(s)`)}</td>
+                  <td>hasta ${Number(room.capacidad_adultos)}</td>
+                  <td>${Number(room.cantidad)}</td>
+                  <td class="room-free" data-free>Elige fechas</td>
+                  <td>${formatMoney(Number(room.precio_noche), listing.moneda)}</td>
+                  <td><button type="button" class="room-pick" data-pick-room="${escapeHtml(room.codigo)}" aria-label="Elegir ${escapeHtml(room.nombre)}">Elegir</button></td>
+                </tr>`,
+                )
+                .join('')}
+            </tbody>
+          </table>
+        </div>
+      </section>
       <section class="booking-box" aria-label="Formulario de reserva">
         <div class="booking-header">
           <strong id="booking-total">${formatMoney(0, listing.moneda)}</strong>
@@ -323,6 +368,57 @@ function renderDetails(listing) {
   const submitButton = form.querySelector('button[type="submit"]');
   let quoteRequestNumber = 0;
   const bedsInput = form.elements.camasMinimas;
+  const roomsTable = dialogContent.querySelector('.rooms-table');
+  let roomsTableRequest = 0;
+
+  async function refreshRoomsTable(start, end) {
+    const request = ++roomsTableRequest;
+    const cells = roomsTable.querySelectorAll('[data-free]');
+    cells.forEach((cell) => {
+      cell.textContent = 'Consultando…';
+      cell.dataset.state = 'loading';
+    });
+    try {
+      const params = new URLSearchParams({
+        checkin: start,
+        checkout: end,
+        habitaciones: '1',
+        adultos: '1',
+      });
+      const response = await fetch(
+        `/api/v2/alojamientos/${encodeURIComponent(listing.codigoIntegracion)}/availability?${params.toString()}`,
+      );
+      const body = await readResponse(response);
+      if (request !== roomsTableRequest) return;
+      const byCode = new Map(
+        (body.tipos || []).map((room) => [room.codigo, room]),
+      );
+      for (const row of roomsTable.querySelectorAll('tr[data-room-code]')) {
+        const cell = row.querySelector('[data-free]');
+        const room = byCode.get(row.dataset.roomCode);
+        const free = room ? Number(room.available_rooms) : 0;
+        const total = room ? Number(room.total_rooms) : Number(row.children[3].textContent);
+        cell.dataset.state = free === 0 ? 'full' : free <= 2 ? 'low' : 'free';
+        cell.textContent = free === 0 ? 'Completo' : `${free} de ${total}`;
+      }
+    } catch {
+      if (request !== roomsTableRequest) return;
+      cells.forEach((cell) => {
+        cell.textContent = '—';
+        cell.dataset.state = '';
+      });
+    }
+  }
+
+  roomsTable.addEventListener('click', (event) => {
+    const pick = event.target.closest('[data-pick-room]');
+    if (!pick) return;
+    bedsInput.value = '0';
+    renderRoomOptions();
+    roomInput.value = pick.dataset.pickRoom;
+    roomInput.dispatchEvent(new Event('change'));
+    roomInput.focus();
+  });
   const roomInfo = dialogContent.querySelector('#room-info');
 
   function roomOptionLabel(room) {
@@ -634,6 +730,7 @@ function renderDetails(listing) {
       );
       return;
     }
+    void refreshRoomsTable(quoteInput.fechaInicio, quoteInput.fechaFin);
     const fingerprint = JSON.stringify(quoteInput);
     setAvailability('loading', 'Consultando disponibilidad y precio actualizados…');
     try {

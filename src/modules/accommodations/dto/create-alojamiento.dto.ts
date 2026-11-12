@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
   ArrayMinSize,
   IsArray,
   IsIn,
@@ -17,6 +18,8 @@ import {
   MinLength,
   ValidateNested,
 } from 'class-validator';
+
+import { TipoHabitacionInputDto } from './tipo-habitacion-input.dto';
 
 export const ALOJAMIENTO_TIPOS = ['hotel', 'departamento', 'villa'] as const;
 
@@ -136,6 +139,19 @@ export class CreateAlojamientoDto {
   @ArrayMinSize(1)
   @IsUrl({ require_protocol: true }, { each: true })
   imagenes!: string[];
+
+  @ApiPropertyOptional({
+    type: [TipoHabitacionInputDto],
+    description:
+      'Tipos de habitación (cantidad, camas, huéspedes y precio). Si se envían, habitacionesDisponibles, capacidadMaxima y precioBaseNoche se recalculan a partir de ellos.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(20)
+  @ValidateNested({ each: true })
+  @Type(() => TipoHabitacionInputDto)
+  tiposHabitacion?: TipoHabitacionInputDto[];
 }
 
 function normalizeStringArray(value: unknown): unknown {

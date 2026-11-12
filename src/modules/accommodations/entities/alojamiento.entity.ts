@@ -49,6 +49,9 @@ export class AlojamientoEntity {
   @ApiProperty({ example: 2 })
   habitacionesDisponibles!: number;
 
+  @ApiProperty({ type: () => [AlojamientoTipoHabitacionEntity] })
+  tiposHabitacion!: AlojamientoTipoHabitacionEntity[];
+
   @ApiProperty({ type: [String], example: ['wifi', 'desayuno'] })
   servicios!: string[];
 
@@ -60,4 +63,30 @@ export class AlojamientoEntity {
 
   @ApiProperty({ format: 'date-time' })
   createdAt!: string;
+}
+
+export class AlojamientoTipoHabitacionEntity {
+  @ApiProperty({ example: 'HABITACION_DOBLE' })
+  codigo!: string;
+
+  @ApiProperty({ example: 'Habitación doble' })
+  nombre!: string;
+
+  @ApiPropertyOptional({ nullable: true })
+  descripcion!: string | null;
+
+  @ApiProperty({ example: 2, description: 'Habitaciones de este tipo.' })
+  cantidad!: number;
+
+  @ApiProperty({ example: 2, description: 'Camas por habitación.' })
+  camas!: number;
+
+  @ApiProperty({ example: '2 camas individuales' })
+  descripcionCamas!: string;
+
+  @ApiProperty({ example: 2, description: 'Huéspedes por habitación.' })
+  capacidadAdultos!: number;
+
+  @ApiProperty({ example: 66 })
+  precioNoche!: number;
 }

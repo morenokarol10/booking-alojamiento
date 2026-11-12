@@ -487,13 +487,15 @@
             />
           </label>
           <label class="form-field"
-            >Precio base por noche <span class="required">*</span>
+            >Precio desde (por noche)
+            <small class="field-note">Se calcula con la habitación más barata.</small>
             <span class="input-prefix"
               ><span>$</span
               ><input
                 name="precioBaseNoche"
                 type="number"
-                required
+                readonly
+                tabindex="-1"
                 min="0"
                 max="9999999999"
                 step="0.01"
@@ -512,31 +514,26 @@
               value="USD"
             />
           </label>
-          <label class="form-field"
-            >Capacidad máxima <span class="required">*</span>
-            <input
-              name="capacidadMaxima"
-              type="number"
-              required
-              min="1"
-              max="1000"
-              step="1"
-              inputmode="numeric"
-              placeholder="Ej. 4"
-            />
-          </label>
-          <label class="form-field"
-            >Habitaciones disponibles <span class="required">*</span>
-            <input
-              name="habitacionesDisponibles"
-              type="number"
-              required
-              min="0"
-              max="1000"
-              step="1"
-              value="1"
-            />
-          </label>
+          <input type="hidden" name="capacidadMaxima" value="1" />
+          <input type="hidden" name="habitacionesDisponibles" value="1" />
+          <fieldset class="form-field full-field room-editor" aria-describedby="room-editor-help">
+            <legend>Habitaciones del alojamiento <span class="required">*</span></legend>
+            <p class="room-editor-help" id="room-editor-help">
+              Agrega cada tipo de habitación: cuántas hay, cuántas camas tiene cada una y para cuántos huéspedes.
+              El total de habitaciones, la capacidad y el precio “desde” se calculan solos.
+            </p>
+            <div class="room-presets" role="group" aria-label="Agregar un tipo de habitación">
+              <span>Agregar:</span>
+              <button type="button" class="room-preset" data-preset="simple">+ Simple</button>
+              <button type="button" class="room-preset" data-preset="doble">+ Doble</button>
+              <button type="button" class="room-preset" data-preset="matrimonial">+ Matrimonial</button>
+              <button type="button" class="room-preset" data-preset="familiar">+ Familiar</button>
+              <button type="button" class="room-preset" data-preset="suite">+ Suite</button>
+              <button type="button" class="room-preset" data-preset="otra">+ Otra</button>
+            </div>
+            <div class="room-list" id="room-list"></div>
+            <p class="room-summary" id="room-summary" aria-live="polite"></p>
+          </fieldset>
           <label class="form-field full-field"
             >URLs de imágenes <span class="required">*</span>
             <input

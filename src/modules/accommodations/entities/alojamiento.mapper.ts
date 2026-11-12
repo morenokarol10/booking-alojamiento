@@ -103,6 +103,7 @@ export function toAlojamientoEntity(
       row.habitaciones_disponibles,
       'habitaciones_disponibles',
     ),
+    tiposHabitacion: mapRoomTypes(row.tipos_habitacion),
     servicios: stringArray(row.servicios, 'servicios'),
     politicaCancelacion: nullableString(row.politica_cancelacion),
     imagenes: stringArray(row.urls_imagenes, 'urls_imagenes'),
@@ -282,4 +283,31 @@ function isStringArray(value: unknown): value is string[] {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function mapRoomTypes(value: unknown): AlojamientoEntity['tiposHabitacion'] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter(
+      (room): room is Record<string, unknown> =>
+        typeof room === 'object' && room !== null && room.activo !== false,
+    )
+    .map((room) => {
+      const beds = Number(room.numero_camas) || 1;
+      return {
+        codigo: String(room.codigo),
+        nombre: String(room.nombre),
+        descripcion:
+          typeof room.descripcion === 'string' ? room.descripcion : null,
+        cantidad: Number(room.habitaciones_totales) || 0,
+        camas: beds,
+        descripcionCamas:
+          typeof room.camas === 'string' && room.camas.trim()
+            ? room.camas
+            : `${beds} ${beds === 1 ? 'cama' : 'camas'}`,
+        capacidadAdultos: Number(room.capacidad_maxima) || 1,
+        precioNoche: Number(room.precio_base_noche) || 0,
+      };
+    })
+    .sort((left, right) => left.precioNoche - right.precioNoche);
 }

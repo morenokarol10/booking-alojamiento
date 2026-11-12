@@ -1458,3 +1458,106 @@ select:focus-visible {
 .room-info:empty {
   display: none;
 }
+
+/* Habitaciones del alojamiento (tarjeta y detalle) */
+.visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.card-rooms {
+  margin: 2px 0 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.rooms-overview {
+  margin: 4px 0 20px;
+}
+.rooms-overview-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.rooms-overview-head h3 {
+  margin: 0;
+  font-size: 15px;
+}
+.rooms-overview-head span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.rooms-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.rooms-table {
+  width: 100%;
+  min-width: 560px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.rooms-table th,
+.rooms-table td {
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: middle;
+}
+.rooms-table thead th {
+  background: #f6f8f6;
+  color: #3f4a42;
+  font-size: 11px;
+  font-weight: 700;
+}
+.rooms-table tbody tr:last-child > * {
+  border-bottom: 0;
+}
+.rooms-table tbody th {
+  font-weight: 600;
+}
+.rooms-table tbody th small {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 400;
+}
+.room-free {
+  font-weight: 600;
+  white-space: nowrap;
+}
+.room-free[data-state='free'] {
+  color: #24502f;
+}
+.room-free[data-state='low'] {
+  color: #6b4a06;
+}
+.room-free[data-state='full'] {
+  color: #8a2a1f;
+}
+.room-free[data-state='loading'] {
+  color: var(--muted);
+  font-weight: 400;
+}
+.room-pick {
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--green);
+  border-radius: 7px;
+  background: white;
+  color: var(--green);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.room-pick:hover {
+  background: var(--sage);
+}

@@ -1523,3 +1523,127 @@ body.auth-pending .app-shell {
   color: #5f6a62;
   font-weight: 400;
 }
+
+/* Editor de habitaciones del alojamiento */
+.field-note {
+  display: block;
+  color: #5f6a62;
+  font-size: 11px;
+  font-weight: 400;
+}
+.form-field input[readonly] {
+  background: #f3f5f2;
+  color: #3f4a42;
+}
+.room-editor {
+  margin: 0;
+  padding: 14px;
+  min-width: 0;
+  border: 1px solid #dfe4de;
+  border-radius: 10px;
+}
+.room-editor legend {
+  padding: 0 6px;
+  font-size: 13px;
+  font-weight: 700;
+}
+.room-editor-help {
+  margin: 0 0 10px;
+  color: #5f6a62;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.room-presets {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.room-preset {
+  min-height: 32px;
+  padding: 0 11px;
+  border: 1px dashed #9db5a3;
+  border-radius: 999px;
+  background: #f4f8f4;
+  color: #2f5a3c;
+  font: inherit;
+  cursor: pointer;
+}
+.room-preset:hover {
+  border-style: solid;
+  background: #e6f0e8;
+}
+.room-list {
+  display: grid;
+  gap: 10px;
+}
+.room-row {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) repeat(3, minmax(0, 0.8fr)) minmax(0, 1fr);
+  gap: 8px;
+  align-items: end;
+  padding: 10px;
+  border: 1px solid #e5e9e4;
+  border-radius: 9px;
+  background: #fbfcfb;
+}
+.room-field {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  color: #3f4a42;
+  font-size: 11px;
+  font-weight: 600;
+}
+.room-field input {
+  width: 100%;
+  min-height: 38px;
+  padding: 7px 9px;
+  border: 1px solid #d5dcd4;
+  border-radius: 7px;
+  background: white;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 400;
+}
+.room-field-beds {
+  grid-column: 1 / span 4;
+}
+.room-remove {
+  align-self: end;
+  justify-self: stretch;
+  min-height: 38px;
+}
+.room-row-hint {
+  grid-column: 1 / -1;
+  color: #2f5a3c;
+  font-size: 11px;
+}
+.room-summary {
+  margin: 12px 0 0;
+  padding: 9px 11px;
+  border-radius: 8px;
+  background: #eef5ef;
+  color: #24402c;
+  font-size: 12px;
+  font-weight: 600;
+}
+.capacity-cell small {
+  display: block;
+  margin-top: 3px;
+  color: #5f6a62;
+  font-size: 11px;
+  line-height: 1.4;
+}
+@media (max-width: 760px) {
+  .room-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .room-field-name,
+  .room-field-beds {
+    grid-column: 1 / -1;
+  }
+}

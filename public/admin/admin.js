@@ -194,7 +194,7 @@ function renderListings() {
           <td><span class="type-badge">${escapeHtml(TYPE_LABELS[listing.tipo] || listing.tipo)}</span></td>
           <td>${escapeHtml(listing.ciudad)}</td>
           <td class="price-cell">${formatMoney(listing.precioBaseNoche, listing.moneda)}</td>
-          <td class="capacity-cell">${Number(listing.capacidadMaxima) || 0} personas</td>
+          <td class="capacity-cell">${roomTypesSummary(listing)}</td>
           <td><span class="status-badge ${Number(listing.habitacionesDisponibles) > 0 ? 'available' : 'unavailable'}">${Number(listing.habitacionesDisponibles) > 0 ? `${Number(listing.habitacionesDisponibles)} disponible(s)` : 'Agotado'}</span></td>
           <td class="actions-cell">
             <button class="row-action" type="button" data-action="edit" data-id="${escapeHtml(listing.id)}" aria-label="Editar ${escapeHtml(listing.nombre)}">Editar</button>
@@ -430,6 +430,17 @@ async function loadEvents() {
   }
 }
 
+function roomTypesSummary(listing) {
+  const rooms = (listing.tiposHabitacion || []).filter((room) => room.cantidad > 0);
+  if (!rooms.length) {
+    return `${Number(listing.capacidadMaxima) || 0} personas`;
+  }
+  const detail = rooms
+    .map((room) => `${room.cantidad} ${escapeHtml(room.nombre.replace(/^Habitación\s+/i, '').toLowerCase())} (${room.camas} ${room.camas === 1 ? 'cama' : 'camas'})`)
+    .join(' · ');
+  return `${rooms.reduce((sum, room) => sum + room.cantidad, 0)} hab. · hasta ${rooms.reduce((sum, room) => sum + room.cantidad * room.capacidadAdultos, 0)} personas<small>${detail}</small>`;
+}
+
 function resetFormError() {
   const error = document.querySelector('#form-error');
   error.hidden = true;
@@ -440,7 +451,7 @@ function openCreateModal() {
   listingForm.reset();
   listingForm.elements.id.value = '';
   listingForm.elements.moneda.value = 'USD';
-  listingForm.elements.habitacionesDisponibles.value = '1';
+  loadRoomRows([]);
   document.querySelector('#listing-modal-title').textContent =
     'Agregar alojamiento';
   document.querySelector('#save-listing-button').textContent =
@@ -460,8 +471,6 @@ function openEditModal(listing) {
     'direccion',
     'precioBaseNoche',
     'moneda',
-    'capacidadMaxima',
-    'habitacionesDisponibles',
     'descripcion',
     'politicaCancelacion',
   ]) {
@@ -469,6 +478,20 @@ function openEditModal(listing) {
   }
   listingForm.elements.servicios.value = (listing.servicios || []).join(', ');
   listingForm.elements.imagenes.value = (listing.imagenes || []).join(', ');
+  loadRoomRows(
+    (listing.tiposHabitacion || []).length
+      ? listing.tiposHabitacion
+      : [
+          {
+            ...ROOM_PRESETS.matrimonial,
+            nombre: 'Habitación estándar',
+            codigo: 'HABITACION_ESTANDAR',
+            cantidad: Number(listing.habitacionesDisponibles) || 1,
+            capacidadAdultos: Number(listing.capacidadMaxima) || 2,
+            precioNoche: Number(listing.precioBaseNoche) || '',
+          },
+        ],
+  );
   document.querySelector('#listing-modal-title').textContent =
     'Editar alojamiento';
   document.querySelector('#save-listing-button').textContent =
@@ -493,7 +516,16 @@ function setButtonBusy(button, busy, text) {
 listingForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   resetFormError();
+  updateRoomSummary();
   if (!listingForm.reportValidity()) return;
+  const tiposHabitacion = readRooms();
+  if (!tiposHabitacion.some((room) => room.cantidad > 0)) {
+    const formError = document.querySelector('#form-error');
+    formError.textContent =
+      'Agrega al menos un tipo de habitación con 1 habitación o más.';
+    formError.hidden = false;
+    return;
+  }
 
   const formData = new FormData(listingForm);
   const id = String(formData.get('id') || '');
@@ -518,6 +550,7 @@ listingForm.addEventListener('submit', async (event) => {
       .map((value) => value.trim())
       .filter(Boolean),
     descripcion: String(formData.get('descripcion') || '').trim(),
+    tiposHabitacion,
   };
   const submitButton = document.querySelector('#save-listing-button');
   setButtonBusy(submitButton, true, 'Guardando…');
@@ -932,6 +965,121 @@ cancelBookingDialog.addEventListener('click', (event) => {
 });
 cancelBookingDialog.addEventListener('close', () => {
   pendingCancellation = null;
+});
+
+// ---- Editor de habitaciones del alojamiento ----
+const roomList = document.querySelector('#room-list');
+const roomSummary = document.querySelector('#room-summary');
+const ROOM_PRESETS = {
+  simple: { nombre: 'Habitación simple', camas: 1, descripcionCamas: '1 cama individual', capacidadAdultos: 1 },
+  doble: { nombre: 'Habitación doble', camas: 2, descripcionCamas: '2 camas individuales', capacidadAdultos: 2 },
+  matrimonial: { nombre: 'Habitación matrimonial', camas: 1, descripcionCamas: '1 cama matrimonial', capacidadAdultos: 2 },
+  familiar: { nombre: 'Habitación familiar', camas: 3, descripcionCamas: '1 cama matrimonial y 2 camas individuales', capacidadAdultos: 4 },
+  suite: { nombre: 'Suite', camas: 1, descripcionCamas: '1 cama king', capacidadAdultos: 2 },
+  otra: { nombre: '', camas: 1, descripcionCamas: '', capacidadAdultos: 2 },
+};
+let roomRowCounter = 0;
+
+function addRoomRow(room = {}) {
+  roomRowCounter += 1;
+  const id = `room-${roomRowCounter}`;
+  const row = document.createElement('div');
+  row.className = 'room-row';
+  row.innerHTML = `
+    <input type="hidden" data-room="codigo" value="${escapeHtml(room.codigo || '')}" />
+    <label class="room-field room-field-name">Tipo de habitación
+      <input data-room="nombre" required minlength="2" maxlength="100" placeholder="Ej. Habitación doble" value="${escapeHtml(room.nombre || '')}" />
+    </label>
+    <label class="room-field">Habitaciones
+      <input data-room="cantidad" type="number" required min="0" max="500" step="1" value="${Number(room.cantidad ?? 1)}" aria-describedby="${id}-hint" />
+    </label>
+    <label class="room-field">Camas c/u
+      <input data-room="camas" type="number" required min="1" max="10" step="1" value="${Number(room.camas ?? 1)}" />
+    </label>
+    <label class="room-field">Huéspedes c/u
+      <input data-room="capacidadAdultos" type="number" required min="1" max="20" step="1" value="${Number(room.capacidadAdultos ?? 2)}" />
+    </label>
+    <label class="room-field">Precio/noche
+      <span class="input-prefix"><span>$</span><input data-room="precioNoche" type="number" required min="0" step="0.01" inputmode="decimal" placeholder="0.00" value="${room.precioNoche ?? ''}" /></span>
+    </label>
+    <label class="room-field room-field-beds">Detalle de camas
+      <input data-room="descripcionCamas" maxlength="100" placeholder="Ej. 1 cama matrimonial y 1 individual" value="${escapeHtml(room.descripcionCamas || '')}" />
+    </label>
+    <button type="button" class="row-action delete room-remove" aria-label="Quitar este tipo de habitación">Quitar</button>
+    <small class="room-row-hint" id="${id}-hint"></small>`;
+  roomList.append(row);
+  updateRoomSummary();
+  return row;
+}
+
+function readRooms() {
+  return Array.from(roomList.querySelectorAll('.room-row')).map((row) => {
+    const value = (name) => row.querySelector(`[data-room="${name}"]`).value.trim();
+    return {
+      ...(value('codigo') ? { codigo: value('codigo') } : {}),
+      nombre: value('nombre'),
+      cantidad: Number(value('cantidad')),
+      camas: Number(value('camas')),
+      capacidadAdultos: Number(value('capacidadAdultos')),
+      precioNoche: Number(value('precioNoche')),
+      ...(value('descripcionCamas') ? { descripcionCamas: value('descripcionCamas') } : {}),
+    };
+  });
+}
+
+function updateRoomSummary() {
+  const rooms = readRooms();
+  for (const [index, row] of Array.from(roomList.querySelectorAll('.room-row')).entries()) {
+    const room = rooms[index];
+    const beds = room.cantidad * room.camas;
+    row.querySelector('.room-row-hint').textContent =
+      room.cantidad > 0
+        ? `${room.cantidad} ${room.cantidad === 1 ? 'habitación' : 'habitaciones'} × ${room.camas} ${room.camas === 1 ? 'cama' : 'camas'} = ${beds} ${beds === 1 ? 'cama' : 'camas'} · hasta ${room.cantidad * room.capacidadAdultos} huéspedes`
+        : 'Sin habitaciones a la venta de este tipo.';
+  }
+  const offered = rooms.filter((room) => room.cantidad > 0);
+  const totalRooms = offered.reduce((sum, room) => sum + room.cantidad, 0);
+  const totalBeds = offered.reduce((sum, room) => sum + room.cantidad * room.camas, 0);
+  const totalGuests = offered.reduce((sum, room) => sum + room.cantidad * room.capacidadAdultos, 0);
+  const prices = offered.map((room) => room.precioNoche).filter((price) => price > 0);
+  const fromPrice = prices.length ? Math.min(...prices) : 0;
+  listingForm.elements.habitacionesDisponibles.value = String(totalRooms);
+  listingForm.elements.capacidadMaxima.value = String(
+    Math.max(1, ...offered.map((room) => room.capacidadAdultos || 1)),
+  );
+  listingForm.elements.precioBaseNoche.value = fromPrice ? fromPrice.toFixed(2) : '';
+  roomSummary.textContent = rooms.length
+    ? `Total: ${totalRooms} ${totalRooms === 1 ? 'habitación' : 'habitaciones'} en ${rooms.length} ${rooms.length === 1 ? 'tipo' : 'tipos'} · ${totalBeds} ${totalBeds === 1 ? 'cama' : 'camas'} · hasta ${totalGuests} huéspedes${fromPrice ? ` · desde ${formatMoney(fromPrice, listingForm.elements.moneda.value || 'USD')}/noche` : ''}`
+    : 'Agrega al menos un tipo de habitación.';
+}
+
+function loadRoomRows(rooms) {
+  roomList.replaceChildren();
+  if (rooms.length === 0) {
+    addRoomRow({ ...ROOM_PRESETS.matrimonial, nombre: 'Habitación estándar', cantidad: 1 });
+  } else {
+    rooms.forEach((room) => addRoomRow(room));
+  }
+}
+
+document.querySelector('.room-presets').addEventListener('click', (event) => {
+  const button = event.target.closest('[data-preset]');
+  if (!button) return;
+  const preset = ROOM_PRESETS[button.dataset.preset];
+  const basePrice = Number(listingForm.elements.precioBaseNoche.value) || '';
+  const row = addRoomRow({ ...preset, cantidad: 1, precioNoche: basePrice });
+  row.querySelector(preset.nombre ? '[data-room="precioNoche"]' : '[data-room="nombre"]').focus();
+});
+roomList.addEventListener('input', updateRoomSummary);
+roomList.addEventListener('click', (event) => {
+  const remove = event.target.closest('.room-remove');
+  if (!remove) return;
+  if (roomList.querySelectorAll('.room-row').length === 1) {
+    showToast('El alojamiento necesita al menos un tipo de habitación.', true);
+    return;
+  }
+  remove.closest('.room-row').remove();
+  updateRoomSummary();
 });
 
 void initializeAdmin();

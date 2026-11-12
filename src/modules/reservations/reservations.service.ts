@@ -1,6 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
 import {
-  BadGatewayException,
   BadRequestException,
   ConflictException,
   Inject,
@@ -8,7 +7,6 @@ import {
   InternalServerErrorException,
   Logger,
   NotFoundException,
-  ServiceUnavailableException,
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -481,63 +479,7 @@ export class ReservationsService {
       );
     }
 
-    const apiKey = this.config.get<string>('API_KEY');
-    if (!apiKey) {
-      throw new ServiceUnavailableException(
-        'Falta configurar API_KEY para enviar el check-in a Booking Core.',
-      );
-    }
-
-    const baseUrl =
-      this.config.get<string>('BOOKING_CORE_API_URL') ??
-      'https://booking-core-api.azurewebsites.net';
-    let checkinUrl: URL;
-    try {
-      checkinUrl = new URL(
-        `/api/v1/reservas/${encodeURIComponent(externalOrderId)}/checkin`,
-        baseUrl,
-      );
-    } catch {
-      throw new ServiceUnavailableException(
-        'BOOKING_CORE_API_URL no contiene una URL válida.',
-      );
-    }
-    if (checkinUrl.protocol !== 'https:') {
-      throw new ServiceUnavailableException(
-        'BOOKING_CORE_API_URL debe usar HTTPS para proteger la API key.',
-      );
-    }
-
-    let upstreamResponse: Response;
-    try {
-      upstreamResponse = await fetch(checkinUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-API-Key': apiKey,
-        },
-        body: JSON.stringify({
-          external_order_id: externalOrderId,
-          estado: 'CONFIRMADO_ASISTIDO',
-          huespedes_reales: dto.huespedesReales,
-        }),
-        signal: AbortSignal.timeout(10_000),
-      });
-    } catch (error) {
-      this.logger.warn(
-        `No se pudo contactar Booking Core para la orden ${externalOrderId} (${error instanceof Error ? error.name : 'error de red'}).`,
-      );
-      throw new ServiceUnavailableException(
-        'No se pudo contactar Booking Core para confirmar el check-in. Inténtalo nuevamente.',
-      );
-    }
-    if (!upstreamResponse.ok) {
-      throw new BadGatewayException({
-        message: 'Booking Core rechazó el registro de check-in.',
-        upstreamStatus: upstreamResponse.status,
-      });
-    }
-
+    // 1) La llegada se registra siempre en este nodo (dueño del inventario).
     const { data: updated, error: updateError } = await this.supabase
       .from('reservas')
       .update({
@@ -548,31 +490,124 @@ export class ReservationsService {
       .eq('estado_integracion', 'CONFIRMED')
       .select('id')
       .maybeSingle();
-    if (updateError || !updated) {
+    if (updateError) {
       if (
-        updateError?.message.includes('ROOM_STILL_CLEANING') ||
-        updateError?.message.includes('ROOM_STILL_OCCUPIED')
+        updateError.message.includes('ROOM_STILL_CLEANING') ||
+        updateError.message.includes('ROOM_STILL_OCCUPIED')
       ) {
         throw new ConflictException(
           'La habitación asignada todavía no está disponible.',
         );
       }
       this.logger.error(
-        `Booking Core confirmó el check-in, pero no se pudo actualizar la orden ${externalOrderId} en Supabase.`,
+        `No se pudo registrar el check-in de la orden ${externalOrderId} (código Supabase: ${updateError.code ?? 'desconocido'}).`,
       );
       throw new InternalServerErrorException(
-        'Booking Core confirmó el check-in, pero no se pudo actualizar su estado local. Contacta soporte antes de reintentar.',
+        'No se pudo registrar el check-in.',
+      );
+    }
+    if (!updated) {
+      throw new ConflictException(
+        'La reserva cambió de estado antes de registrar el check-in.',
       );
     }
 
-    return {
-      data: {
-        external_order_id: externalOrderId,
-        estado: 'CONFIRMADO_ASISTIDO',
-        huespedes_reales: dto.huespedesReales,
-      },
-      message: 'Check-in presencial confirmado por Booking Core.',
+    // 2) Se confirma a Booking Core. Si no responde, la llegada queda
+    //    registrada y el panel lo advierte (no se bloquea la recepción).
+    const notification = await this.notifyBookingCoreCheckin(
+      externalOrderId,
+      dto.huespedesReales,
+    );
+    const data = {
+      external_order_id: externalOrderId,
+      estado: 'CONFIRMADO_ASISTIDO',
+      huespedes_reales: dto.huespedesReales,
+      booking_core_confirmado: notification.ok,
     };
+    if (notification.ok) {
+      return {
+        data,
+        message: 'Check-in registrado y confirmado a Booking Core.',
+      };
+    }
+    await this.supabase.from('eventos_log').insert({
+      tipo_evento: 'CheckinBookingPendienteEvent',
+      payload: {
+        eventId: randomUUID(),
+        occurredAt: new Date().toISOString(),
+        data: {
+          reservaId: reservation.id,
+          external_order_id: externalOrderId,
+          huespedes_reales: dto.huespedesReales,
+          motivo: notification.reason,
+        },
+      },
+    });
+    return {
+      data,
+      message: `Check-in registrado. Aviso: no se pudo confirmar a Booking Core (${notification.reason}).`,
+      warning: notification.reason,
+    };
+  }
+
+  private async notifyBookingCoreCheckin(
+    externalOrderId: string,
+    realGuests: number,
+  ): Promise<{ ok: true } | { ok: false; reason: string }> {
+    const apiKey =
+      this.config.get<string>('API_KEY')?.trim() ||
+      this.config
+        .get<string>('INTEGRATION_API_KEYS')
+        ?.split(',')
+        .map((key) => key.trim())
+        .find(Boolean);
+    if (!apiKey) {
+      this.logger.warn(
+        `Check-in ${externalOrderId} sin confirmar a Booking Core: falta API_KEY.`,
+      );
+      return {
+        ok: false,
+        reason: 'falta configurar API_KEY en este servidor',
+      };
+    }
+    let checkinUrl: URL;
+    try {
+      checkinUrl = new URL(
+        `/api/v1/reservas/${encodeURIComponent(externalOrderId)}/checkin`,
+        this.config.get<string>('BOOKING_CORE_API_URL') ??
+          'https://booking-core-api.azurewebsites.net',
+      );
+    } catch {
+      return { ok: false, reason: 'BOOKING_CORE_API_URL no es válida' };
+    }
+    if (checkinUrl.protocol !== 'https:') {
+      return { ok: false, reason: 'BOOKING_CORE_API_URL debe usar HTTPS' };
+    }
+    try {
+      const response = await fetch(checkinUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
+        body: JSON.stringify({
+          external_order_id: externalOrderId,
+          estado: 'CONFIRMADO_ASISTIDO',
+          huespedes_reales: realGuests,
+        }),
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (response.ok) return { ok: true };
+      this.logger.warn(
+        `Booking Core respondió ${response.status} al check-in ${externalOrderId}.`,
+      );
+      return {
+        ok: false,
+        reason: `Booking Core respondió HTTP ${response.status}`,
+      };
+    } catch (error) {
+      this.logger.warn(
+        `No se pudo contactar Booking Core para la orden ${externalOrderId} (${error instanceof Error ? error.name : 'error de red'}).`,
+      );
+      return { ok: false, reason: 'Booking Core no respondió' };
+    }
   }
 
   async checkInMarketplace(reservationId: string, dto: CheckinReservaDto) {

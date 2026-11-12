@@ -27,7 +27,10 @@ function createSupabase(reservation: Record<string, unknown>) {
   const from = jest
     .fn()
     .mockReturnValueOnce(lookupQuery)
-    .mockReturnValueOnce(updateQuery);
+    .mockReturnValueOnce(updateQuery)
+    .mockReturnValue({
+      insert: jest.fn().mockResolvedValue({ data: null, error: null }),
+    });
   const rpc = jest.fn().mockResolvedValue({ data: null, error: null });
   return {
     client: { from, rpc } as unknown as SupabaseClient,
@@ -148,9 +151,9 @@ describe('ReservationsService in-person check-in', () => {
     expect(from).toHaveBeenCalledTimes(1);
   });
 
-  it('reports an upstream rejection without marking the reservation checked in', async () => {
+  it('keeps the arrival when Booking Core rejects the confirmation and warns the staff', async () => {
     jest.useFakeTimers().setSystemTime(new Date('2027-01-20T19:00:00.000Z'));
-    const { client, from } = createSupabase({
+    const { client, updateQuery } = createSupabase({
       id: 'reservation-uuid',
       external_order_id: externalOrderId,
       estado_integracion: 'CONFIRMED',
@@ -167,10 +170,41 @@ describe('ReservationsService in-person check-in', () => {
       ),
     } as never);
 
-    await expect(
-      service.checkIn(externalOrderId, { huespedesReales: 2 }),
-    ).rejects.toMatchObject({ status: 502 });
-    expect(from).toHaveBeenCalledTimes(1);
+    const result = await service.checkIn(externalOrderId, {
+      huespedesReales: 2,
+    });
+    expect(updateQuery.update).toHaveBeenCalledWith({
+      estado_integracion: 'CHECKED_IN',
+      huespedes_reales: 2,
+    });
+    expect(result).toMatchObject({
+      data: { booking_core_confirmado: false },
+      warning: 'Booking Core respondió HTTP 401',
+    });
+  });
+
+  it('registers the arrival even when this server has no API_KEY configured', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2027-01-20T19:00:00.000Z'));
+    const { client, updateQuery } = createSupabase({
+      id: 'reservation-uuid',
+      external_order_id: externalOrderId,
+      estado_integracion: 'CONFIRMED',
+      huespedes_reales: null,
+      fecha_checkin: '2027-01-20',
+      fecha_checkout: '2027-01-22',
+    });
+    const fetchSpy = jest.spyOn(globalThis, 'fetch');
+    const service = new ReservationsService(client, {
+      get: jest.fn(),
+    } as never);
+
+    const result = await service.checkIn(externalOrderId, {
+      huespedesReales: 1,
+    });
+    expect(updateQuery.update).toHaveBeenCalled();
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(result.message).toMatch(/Check-in registrado/);
+    expect(result.warning).toMatch(/API_KEY/);
   });
 
   it('allows an early check-in for a future reservation at any hour', async () => {

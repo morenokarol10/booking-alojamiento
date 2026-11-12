@@ -722,6 +722,7 @@ bookingBody.addEventListener('click', async (event) => {
           : action === 'checkout'
             ? 'Check-out registrado; habitación en limpieza durante 1 hora.'
             : 'Habitación marcada como limpia y disponible.'),
+      Boolean(result?.warning),
     );
     await loadBookings();
   } catch (requestError) {

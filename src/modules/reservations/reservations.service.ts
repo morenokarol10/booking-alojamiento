@@ -525,6 +525,10 @@ export class ReservationsService {
       booking_core_confirmado: notification.ok,
     };
     if (notification.ok) {
+      await this.recordBookingCheckinConfirmed(
+        String(reservation.id),
+        externalOrderId,
+      );
       return {
         data,
         message: 'Check-in registrado y confirmado a Booking Core.',
@@ -550,17 +554,106 @@ export class ReservationsService {
     };
   }
 
-  private async notifyBookingCoreCheckin(
+  /**
+   * Reintenta confirmar a Booking Core los check-in registrados como
+   * pendientes (CheckinBookingPendienteEvent) que aún no tienen su
+   * CheckinBookingConfirmadoEvent. Devuelve cuántos se confirmaron.
+   */
+  async retryPendingBookingCheckins(): Promise<number> {
+    if (!this.bookingApiKey()) return 0;
+    const [pendingResult, confirmedResult] = await Promise.all([
+      this.supabase
+        .from('eventos_log')
+        .select('payload')
+        .eq('tipo_evento', 'CheckinBookingPendienteEvent')
+        .order('creado_en', { ascending: false })
+        .limit(50),
+      this.supabase
+        .from('eventos_log')
+        .select('payload')
+        .eq('tipo_evento', 'CheckinBookingConfirmadoEvent')
+        .order('creado_en', { ascending: false })
+        .limit(500),
+    ]);
+    if (pendingResult.error || confirmedResult.error) return 0;
+    const orderOf = (row: { payload: unknown }) => {
+      const payload = isDatabaseRow(row.payload) ? row.payload : {};
+      const data = isDatabaseRow(payload.data) ? payload.data : {};
+      return {
+        orderId:
+          typeof data.external_order_id === 'string'
+            ? data.external_order_id
+            : '',
+        guests: Number(data.huespedes_reales) || 1,
+      };
+    };
+    const alreadyConfirmed = new Set(
+      (confirmedResult.data ?? []).map((row) => orderOf(row).orderId),
+    );
+    const pending = new Map<string, number>();
+    for (const row of pendingResult.data ?? []) {
+      const { orderId, guests } = orderOf(row);
+      if (orderId && !alreadyConfirmed.has(orderId) && !pending.has(orderId)) {
+        pending.set(orderId, guests);
+      }
+    }
+
+    let confirmed = 0;
+    for (const [orderId, guests] of pending) {
+      const { data: reservation } = await this.supabase
+        .from('reservas')
+        .select('id,estado_integracion,huespedes_reales')
+        .eq('external_order_id', orderId)
+        .maybeSingle();
+      if (
+        !reservation ||
+        !['CHECKED_IN', 'CHECKED_OUT'].includes(
+          String(reservation.estado_integracion),
+        )
+      ) {
+        continue;
+      }
+      const result = await this.notifyBookingCoreCheckin(
+        orderId,
+        Number(reservation.huespedes_reales) || guests,
+      );
+      if (!result.ok) continue;
+      await this.recordBookingCheckinConfirmed(String(reservation.id), orderId);
+      confirmed += 1;
+    }
+    return confirmed;
+  }
+
+  private async recordBookingCheckinConfirmed(
+    reservationId: string,
     externalOrderId: string,
-    realGuests: number,
-  ): Promise<{ ok: true } | { ok: false; reason: string }> {
-    const apiKey =
+  ) {
+    await this.supabase.from('eventos_log').insert({
+      tipo_evento: 'CheckinBookingConfirmadoEvent',
+      payload: {
+        eventId: randomUUID(),
+        occurredAt: new Date().toISOString(),
+        data: { reservaId: reservationId, external_order_id: externalOrderId },
+      },
+    });
+  }
+
+  private bookingApiKey(): string | undefined {
+    return (
       this.config.get<string>('API_KEY')?.trim() ||
       this.config
         .get<string>('INTEGRATION_API_KEYS')
         ?.split(',')
         .map((key) => key.trim())
-        .find(Boolean);
+        .find(Boolean)
+    );
+  }
+
+  private async notifyBookingCoreCheckin(
+    externalOrderId: string,
+    realGuests: number,
+  ): Promise<{ ok: true } | { ok: false; reason: string }> {
+    const apiKey = this.bookingApiKey();
     if (!apiKey) {
       this.logger.warn(
         `Check-in ${externalOrderId} sin confirmar a Booking Core: falta API_KEY.`,
@@ -594,7 +687,8 @@ export class ReservationsService {
         }),
         signal: AbortSignal.timeout(10_000),
       });
-      if (response.ok) return { ok: true };
+      // 409: Booking ya tenía registrada esta llegada.
+      if (response.ok || response.status === 409) return { ok: true };
       this.logger.warn(
         `Booking Core respondió ${response.status} al check-in ${externalOrderId}.`,
       );

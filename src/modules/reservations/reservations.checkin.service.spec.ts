@@ -172,4 +172,48 @@ describe('ReservationsService in-person check-in', () => {
     ).rejects.toMatchObject({ status: 502 });
     expect(from).toHaveBeenCalledTimes(1);
   });
+
+  it('allows an early check-in for a future reservation at any hour', async () => {
+    // 2027-01-10 08:00 en Guayaquil (antes de las 14:00 y 10 días antes).
+    jest.useFakeTimers().setSystemTime(new Date('2027-01-10T13:00:00.000Z'));
+    const { client, updateQuery } = createSupabase({
+      id: 'reservation-uuid',
+      external_order_id: null,
+      estado_integracion: 'CONFIRMED',
+      huespedes_reales: null,
+      fecha_checkin: '2027-01-20',
+      fecha_checkout: '2027-01-22',
+    });
+    const service = new ReservationsService(client, {
+      get: jest.fn(),
+    } as never);
+
+    await expect(
+      service.checkInMarketplace('reservation-uuid', { huespedesReales: 2 }),
+    ).resolves.toMatchObject({ data: { estado: 'CHECKED_IN' } });
+    expect(updateQuery.update).toHaveBeenCalledWith({
+      estado_integracion: 'CHECKED_IN',
+      huespedes_reales: 2,
+    });
+  });
+
+  it('rejects the check-in when the arrival date already passed', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2027-01-21T19:00:00.000Z'));
+    const { client, updateQuery } = createSupabase({
+      id: 'reservation-uuid',
+      external_order_id: null,
+      estado_integracion: 'CONFIRMED',
+      huespedes_reales: null,
+      fecha_checkin: '2027-01-20',
+      fecha_checkout: '2027-01-22',
+    });
+    const service = new ReservationsService(client, {
+      get: jest.fn(),
+    } as never);
+
+    await expect(
+      service.checkInMarketplace('reservation-uuid', { huespedesReales: 2 }),
+    ).rejects.toThrow(/fecha de llegada de esta reserva ya pasó/);
+    expect(updateQuery.update).not.toHaveBeenCalled();
+  });
 });

@@ -468,22 +468,7 @@ export class ReservationsService {
         'Solo se puede registrar el check-in de una reserva confirmada.',
       );
     }
-    const localNow = this.guayaquilDateTime();
-    if (
-      localNow.date < String(reservation.fecha_checkin) ||
-      localNow.date >= String(reservation.fecha_checkout)
-    ) {
-      throw new ConflictException(
-        'El check-in solo se puede registrar durante las fechas de la reserva.',
-      );
-    }
-    if (localNow.minutes < 14 * 60) {
-      throw new UnprocessableEntityException({
-        code: 'CHECKIN_TIME_NOT_REACHED',
-        detail:
-          'El check-in presencial se habilita a partir de las 14:00 hora de Guayaquil.',
-      });
-    }
+    this.assertCheckinDateAllowed(reservation);
 
     const { error: roomValidationError } = await this.supabase.rpc(
       'validate_alojamiento_checkin_room_state',
@@ -628,22 +613,7 @@ export class ReservationsService {
       );
     }
 
-    const localNow = this.guayaquilDateTime();
-    if (
-      localNow.date < String(reservation.fecha_checkin) ||
-      localNow.date >= String(reservation.fecha_checkout)
-    ) {
-      throw new ConflictException(
-        'El check-in solo se puede registrar durante las fechas de la reserva.',
-      );
-    }
-    if (localNow.minutes < 14 * 60) {
-      throw new UnprocessableEntityException({
-        code: 'CHECKIN_TIME_NOT_REACHED',
-        detail:
-          'El check-in presencial se habilita a partir de las 14:00 hora de Guayaquil.',
-      });
-    }
+    this.assertCheckinDateAllowed(reservation);
 
     const { data: updated, error: updateError } = await this.supabase
       .from('reservas')
@@ -756,6 +726,20 @@ export class ReservationsService {
     const startTime = Date.parse(`${start}T00:00:00Z`);
     const endTime = Date.parse(`${end}T00:00:00Z`);
     return (endTime - startTime) / 86_400_000;
+  }
+
+  /**
+   * Regla de check-in: se permite registrar la llegada el mismo día de la
+   * reserva o por adelantado (cualquier fecha futura, a cualquier hora).
+   * Solo se rechazan las reservas cuya fecha de llegada ya pasó.
+   */
+  private assertCheckinDateAllowed(reservation: { fecha_checkin?: unknown }) {
+    const today = this.guayaquilDateTime().date;
+    if (String(reservation.fecha_checkin) < today) {
+      throw new ConflictException(
+        'No se puede registrar el check-in: la fecha de llegada de esta reserva ya pasó.',
+      );
+    }
   }
 
   private guayaquilDateTime(): { date: string; minutes: number } {

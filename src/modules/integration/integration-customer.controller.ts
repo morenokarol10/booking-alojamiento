@@ -5,19 +5,19 @@ import {
   HttpCode,
   HttpStatus,
   Post,
+  Query,
   UseFilters,
   UseGuards,
 } from '@nestjs/common';
-import {
-  ApiOkResponse,
-  ApiOperation,
-  ApiTags,
-} from '@nestjs/swagger';
+import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
   IntegrationAuthGuard,
   IntegrationScope,
 } from './integration-auth.guard';
-import { IntegrationCustomerDto } from './integration-customer.dto';
+import {
+  IntegrationCustomerDto,
+  IntegrationCustomerQueryDto,
+} from './integration-customer.dto';
 import { IntegrationCustomerService } from './integration-customer.service';
 import { IntegrationProblemFilter } from './integration-problem.filter';
 
@@ -26,16 +26,17 @@ import { IntegrationProblemFilter } from './integration-problem.filter';
 @UseGuards(IntegrationAuthGuard)
 @UseFilters(IntegrationProblemFilter)
 export class IntegrationCustomerController {
-  constructor(
-    private readonly customers: IntegrationCustomerService,
-  ) {}
+  constructor(private readonly customers: IntegrationCustomerService) {}
 
   @Get()
   @IntegrationScope('alojamientos:read')
-  @ApiOperation({ summary: 'Listar huéspedes sincronizados por Booking' })
+  @ApiOperation({
+    summary:
+      'Listar o buscar huéspedes sincronizados (por identificacion/cedula o email)',
+  })
   @ApiOkResponse({ description: 'Huéspedes consultados correctamente.' })
-  findAll() {
-    return this.customers.findAll();
+  findAll(@Query() query: IntegrationCustomerQueryDto) {
+    return this.customers.findAll(query);
   }
 
   @Post()

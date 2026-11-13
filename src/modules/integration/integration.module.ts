@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { AuthModule } from '../auth/auth.module';
+import { AdminCustomerController } from './admin-customer.controller';
 import { IntegrationHealthController } from './integration-health.controller';
 import { IntegrationHealthService } from './integration-health.service';
 import { IntegrationCatalogController } from './integration-catalog.controller';
@@ -15,7 +17,9 @@ import { IntegrationCustomerController } from './integration-customer.controller
 import { IntegrationCustomerService } from './integration-customer.service';
 
 @Module({
+  imports: [AuthModule],
   controllers: [
+    AdminCustomerController,
     IntegrationHealthController,
     IntegrationCatalogController,
     IntegrationOrderController,

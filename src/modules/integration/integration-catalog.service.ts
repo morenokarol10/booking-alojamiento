@@ -40,9 +40,7 @@ export class IntegrationCatalogService {
       precioPorNoche: this.money(String(accommodation.precio_base_noche)),
       moneda: String(accommodation.moneda),
       capacidadAdultos: Number(accommodation.capacidad_maxima),
-      fotos: Array.isArray(accommodation.urls_imagenes)
-        ? accommodation.urls_imagenes
-        : [],
+      fotos: photoUrls(accommodation.urls_imagenes),
     };
   }
 
@@ -902,7 +900,7 @@ export class IntegrationCatalogService {
       descuentoMaximo: Number(row.descuento_maximo ?? 0),
       checkInPermitidoDesde: '14:00',
       checkOutHoraMaxima: '11:00',
-      fotos: Array.isArray(row.urls_imagenes) ? row.urls_imagenes : [],
+      fotos: photoUrls(row.urls_imagenes),
       amenidades: Array.isArray(row.servicios) ? row.servicios : [],
       actualizadoEn: String(row.updated_at),
     };
@@ -1106,4 +1104,19 @@ export class IntegrationCatalogService {
     }
     return String(value);
   }
+}
+
+/** urls_imagenes puede llegar como arreglo o como texto JSON ("[\"https://…\"]"). */
+export function photoUrls(value: unknown): string[] {
+  let list: unknown = value;
+  if (typeof value === 'string') {
+    try {
+      list = JSON.parse(value);
+    } catch {
+      list = value.startsWith('http') ? [value] : [];
+    }
+  }
+  return Array.isArray(list)
+    ? list.filter((url): url is string => typeof url === 'string' && url !== '')
+    : [];
 }

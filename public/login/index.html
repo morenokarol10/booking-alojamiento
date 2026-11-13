@@ -71,6 +71,21 @@
             maxlength="160"
             required
           />
+          <label for="register-cedula">Cédula</label>
+          <input
+            id="register-cedula"
+            name="cedula"
+            type="text"
+            inputmode="numeric"
+            autocomplete="off"
+            minlength="10"
+            maxlength="10"
+            pattern="[0-9]{10}"
+            placeholder="Ej. 1600222176"
+            aria-describedby="register-cedula-hint"
+            required
+          />
+          <small class="field-hint" id="register-cedula-hint" aria-live="polite">10 dígitos. La pide Booking para identificarte.</small>
           <label for="register-phone">Teléfono</label>
           <input
             id="register-phone"
@@ -90,17 +105,23 @@
             autocomplete="email"
             required
           />
-          <label for="register-password"
-            >Contraseña (mínimo 12 caracteres)</label
-          >
+          <label for="register-password">Contraseña</label>
           <input
             id="register-password"
             name="password"
             type="password"
             autocomplete="new-password"
-            minlength="12"
+            minlength="8"
+            maxlength="72"
+            aria-describedby="register-password-rules"
             required
           />
+          <ul class="password-rules" id="register-password-rules" aria-live="polite">
+            <li data-rule="length">Al menos 8 caracteres</li>
+            <li data-rule="upper">Una letra mayúscula</li>
+            <li data-rule="number">Un número</li>
+            <li data-rule="special">Un carácter especial (! @ # $ % …)</li>
+          </ul>
           <button class="submit-button" type="submit">
             Crear cuenta de cliente
           </button>

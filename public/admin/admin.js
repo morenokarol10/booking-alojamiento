@@ -224,7 +224,7 @@ async function loadUsers() {
         (user) => `
         <tr>
           <td><div class="guest-cell"><strong>${escapeHtml(user.fullName || 'Sin nombre')}</strong><small>${escapeHtml(user.email)}</small></div></td>
-          <td>${escapeHtml(user.phone || '—')}</td>
+          <td>${escapeHtml(user.phone || '—')}${user.cedula ? `<small>Cédula ${escapeHtml(user.cedula)}</small>` : ''}</td>
           <td>
             <select class="user-role-select" data-user-id="${escapeHtml(user.id)}" aria-label="Rol de ${escapeHtml(user.email)}" ${user.id === currentUser?.id ? 'disabled' : ''}>
               <option value="admin" ${user.role === 'admin' ? 'selected' : ''}>Administrador</option>
@@ -309,10 +309,13 @@ async function loadBookings(silent = false) {
               })
               .join('')
           : '<small>Habitación sin asignación</small>';
+        // Cada reserva se cancela donde se hizo: las de Booking, solo en Booking.
         const cancelButton =
-          booking.estadoIntegracion === 'CONFIRMED'
-            ? `<button class="row-action delete" type="button" data-action="cancel" data-reservation-id="${escapeHtml(booking.id)}" aria-label="Cancelar la reserva de ${escapeHtml(booking.clienteNombre)}">Cancelar reserva</button>`
-            : '';
+          booking.estadoIntegracion !== 'CONFIRMED'
+            ? ''
+            : booking.externalOrderId
+              ? '<small class="cancel-origin-note">Solo se cancela desde Booking</small>'
+              : `<button class="row-action delete" type="button" data-action="cancel" data-reservation-id="${escapeHtml(booking.id)}" aria-label="Cancelar la reserva de ${escapeHtml(booking.clienteNombre)}">Cancelar reserva</button>`;
         const adminOperations = !isAdmin
           ? ''
           : booking.estadoIntegracion === 'CONFIRMED'
@@ -328,8 +331,9 @@ async function loadBookings(silent = false) {
             ? `<div class="row-actions-stack">${adminOperations}${cancelButton}</div>`
             : '—';
         const cancellationNote =
-          booking.estado === 'cancelada' && booking.canceladaPor
-            ? `<small class="cancel-note">Por ${escapeHtml(CANCELLED_BY_LABELS[booking.canceladaPor] || booking.canceladaPor)}${
+          booking.estado === 'cancelada' &&
+          (booking.canceladaPor || booking.externalOrderId)
+            ? `<small class="cancel-note">${booking.externalOrderId ? 'Cancelada desde Booking' : `Por ${escapeHtml(CANCELLED_BY_LABELS[booking.canceladaPor] || booking.canceladaPor)}`}${
                 booking.porcentajeReembolso !== null &&
                 booking.porcentajeReembolso !== undefined
                   ? ` · reembolso ${Number(booking.porcentajeReembolso)} %`
@@ -1195,3 +1199,13 @@ window.setInterval(() => {
     void loadBookings(true);
   }
 }, 30_000);
+// Al volver a la pestaña se ven al instante las cancelaciones hechas en Booking.
+document.addEventListener('visibilitychange', () => {
+  if (
+    !document.hidden &&
+    (currentUser?.role === 'admin' || currentUser?.role === 'empleado') &&
+    !cancelBookingDialog.open
+  ) {
+    void loadBookings(true);
+  }
+});

@@ -8,6 +8,7 @@ import {
 import type { SupabaseClient, User } from '@supabase/supabase-js';
 import { SUPABASE_CLIENT } from '../../supabase/supabase.module';
 import type { UserRole } from '../auth/auth.types';
+import { assertCedulaAvailable } from '../auth/account-rules';
 import { CreateManagedUserDto } from './dto/create-managed-user.dto';
 
 @Injectable()
@@ -46,6 +47,7 @@ export class AdminService {
   }
 
   async createUser(dto: CreateManagedUserDto) {
+    await assertCedulaAvailable(this.supabase, dto.cedula);
     const { data, error } = await this.supabase.auth.admin.createUser({
       email: dto.email.trim(),
       password: dto.password,
@@ -54,6 +56,8 @@ export class AdminService {
       user_metadata: {
         full_name: dto.fullName.trim(),
         phone: dto.phone.trim(),
+        cedula: dto.cedula,
+        tipo_documento: 'CEDULA',
       },
     });
     if (error) {
@@ -161,10 +165,9 @@ export class AdminService {
       email: user.email ?? '',
       fullName: this.metadataString(user.user_metadata, 'full_name'),
       phone: this.metadataString(user.user_metadata, 'phone'),
+      cedula: this.metadataString(user.user_metadata, 'cedula'),
       role:
-        role === 'admin' || role === 'empleado'
-          ? role
-          : ('cliente' as const),
+        role === 'admin' || role === 'empleado' ? role : ('cliente' as const),
       createdAt: user.created_at ?? null,
       emailConfirmed: Boolean(user.email_confirmed_at),
     };

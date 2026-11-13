@@ -10,7 +10,16 @@ describe('AuthService', () => {
   ) =>
     new AuthService(
       { auth } as unknown as SupabaseClient,
-      { auth: { admin } } as unknown as SupabaseClient,
+      {
+        auth: {
+          admin: {
+            listUsers: jest
+              .fn()
+              .mockResolvedValue({ data: { users: [] }, error: null }),
+            ...admin,
+          },
+        },
+      } as unknown as SupabaseClient,
       {
         get: () => (autoConfirm ? 'true' : 'false'),
       } as unknown as ConfigService,
@@ -25,6 +34,8 @@ describe('AuthService', () => {
         role: 'cliente',
         full_name: 'María Pérez',
         phone: '+593991234567',
+        cedula: '1600222176',
+        tipo_documento: 'CEDULA',
       },
       identities: [{ id: 'identity-1' }],
     };
@@ -49,6 +60,7 @@ describe('AuthService', () => {
       phone: '+593991234567',
       email: 'cliente@example.com',
       password: 'ClienteSeguro123!',
+      cedula: '1600222176',
     });
 
     expect(createUser).toHaveBeenCalledWith({
@@ -59,6 +71,8 @@ describe('AuthService', () => {
         role: 'cliente',
         full_name: 'María Pérez',
         phone: '+593991234567',
+        cedula: '1600222176',
+        tipo_documento: 'CEDULA',
       },
     });
     expect(signInWithPassword).toHaveBeenCalledWith({
@@ -164,6 +178,8 @@ describe('AuthService', () => {
               user_metadata: {
                 full_name: 'María Pérez',
                 phone: '+593991234567',
+                cedula: '1600222176',
+                tipo_documento: 'CEDULA',
               },
             },
           },
@@ -188,6 +204,8 @@ describe('AuthService', () => {
         user_metadata: {
           full_name: 'María Pérez',
           phone: '+593991234567',
+          cedula: '1600222176',
+          tipo_documento: 'CEDULA',
           saved_payment_method: { brand: 'Visa', lastFour: '4242' },
         },
       },
@@ -218,6 +236,7 @@ describe('AuthService', () => {
       phone: '+593991234567',
       email: 'cliente@example.com',
       password: 'ClienteSeguro123!',
+      cedula: '1600222176',
     });
 
     expect(signUp).toHaveBeenCalledWith({
@@ -228,6 +247,8 @@ describe('AuthService', () => {
           role: 'cliente',
           full_name: 'María Pérez',
           phone: '+593991234567',
+          cedula: '1600222176',
+          tipo_documento: 'CEDULA',
         },
       },
     });
@@ -249,6 +270,7 @@ describe('AuthService', () => {
         phone: '+593991234567',
         email: 'cliente@example.com',
         password: 'ClienteSeguro123!',
+        cedula: '1600222176',
       }),
     ).rejects.toThrow(/registro está deshabilitado en Supabase/i);
   });
@@ -269,6 +291,7 @@ describe('AuthService', () => {
         phone: '+593991234567',
         email: 'cliente@example.com',
         password: 'ClienteSeguro123!',
+        cedula: '1600222176',
       }),
     ).rejects.toThrow(/limitó temporalmente el envío de correos/i);
   });
@@ -309,6 +332,7 @@ describe('AuthService', () => {
       phone: '+593991234567',
       email: 'cliente@example.com',
       password: 'ClienteSeguro123!',
+      cedula: '1600222176',
     });
 
     expect(signUp).toHaveBeenCalledWith({
@@ -319,6 +343,8 @@ describe('AuthService', () => {
           role: 'cliente',
           full_name: 'María Pérez',
           phone: '+593991234567',
+          cedula: '1600222176',
+          tipo_documento: 'CEDULA',
         },
       },
     });
@@ -351,6 +377,7 @@ describe('AuthService', () => {
       phone: '+593991234567',
       email: 'cliente@example.com',
       password: 'ClienteSeguro123!',
+      cedula: '1600222176',
     });
 
     expect(response.message).toMatch(/inicia sesión/i);

@@ -510,6 +510,25 @@ describe('ReservationsService payment and event flow', () => {
     expect(response.message).toMatch(/no aplica reembolso/i);
   });
 
+  it('does not let staff cancel a reservation made in Booking', async () => {
+    const reservationId = '40000000-0000-4000-8000-000000000001';
+    const { supabase, rpcCalls } = cancellationStub(
+      reservationId,
+      refundResult(100, '255.00'),
+      { id: reservationId, external_order_id: 'ORD-HTL-AB12CD34EF' },
+    );
+    const service = createService(supabase);
+
+    await expect(
+      service.cancelByStaff(
+        reservationId,
+        { solicitadoPor: 'HUESPED', motivo: 'El huésped llamó.' },
+        { id: 'admin-id', email: 'admin@example.com', role: 'admin' },
+      ),
+    ).rejects.toMatchObject({ status: 409 });
+    expect(rpcCalls).toEqual([]);
+  });
+
   it('refunds in full when the hotel cancels', async () => {
     const reservationId = '40000000-0000-4000-8000-000000000001';
     const { supabase, rpcCalls } = cancellationStub(

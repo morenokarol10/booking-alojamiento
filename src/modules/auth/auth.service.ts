@@ -17,6 +17,7 @@ import type {
   SavedPaymentMethod,
   UserRole,
 } from './auth.types';
+import { assertCedulaAvailable } from './account-rules';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
@@ -34,6 +35,7 @@ export class AuthService {
   ) {}
 
   async register(dto: RegisterDto) {
+    await assertCedulaAvailable(this.adminSupabase, dto.cedula);
     if (
       this.configService
         .get<string>('SUPABASE_AUTH_AUTO_CONFIRM_SIGNUPS')
@@ -50,6 +52,8 @@ export class AuthService {
           role: 'cliente',
           full_name: dto.fullName.trim(),
           phone: dto.phone.trim(),
+          cedula: dto.cedula,
+          tipo_documento: 'CEDULA',
         },
       },
     });
@@ -117,6 +121,9 @@ export class AuthService {
 
   async updateProfile(user: AuthenticatedUser, dto: UpdateProfileDto) {
     const existing = await this.getUserForProfileUpdate(user.id);
+    if (dto.cedula) {
+      await assertCedulaAvailable(this.adminSupabase, dto.cedula, user.id);
+    }
     const { data, error } = await this.adminSupabase.auth.admin.updateUserById(
       user.id,
       {
@@ -127,6 +134,9 @@ export class AuthService {
           role: user.role,
           full_name: dto.fullName.trim(),
           phone: dto.phone.trim(),
+          ...(dto.cedula
+            ? { cedula: dto.cedula, tipo_documento: 'CEDULA' }
+            : {}),
         },
       },
     );
@@ -211,6 +221,7 @@ export class AuthService {
       'phone_number',
       'telefono',
     ]);
+    const cedula = this.metadataString(user.user_metadata, ['cedula']);
     const savedPaymentMethod = this.savedPaymentMethod(
       user.user_metadata?.saved_payment_method,
     );
@@ -219,6 +230,7 @@ export class AuthService {
       email: user.email ?? '',
       role,
       ...(fullName ? { fullName } : {}),
+      ...(cedula ? { cedula } : {}),
       ...(phone ? { phone } : {}),
       ...(savedPaymentMethod ? { savedPaymentMethod } : {}),
     };
@@ -279,6 +291,8 @@ export class AuthService {
         role: 'cliente',
         full_name: dto.fullName.trim(),
         phone: dto.phone.trim(),
+        cedula: dto.cedula,
+        tipo_documento: 'CEDULA',
       },
     });
     if (error) {

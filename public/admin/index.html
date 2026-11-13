@@ -268,11 +268,15 @@
             <label>Correo electrónico
               <input name="email" type="email" required />
             </label>
+            <label>Cédula
+              <input name="cedula" type="text" inputmode="numeric" minlength="10" maxlength="10" pattern="[0-9]{10}" placeholder="Ej. 1600222176" required />
+            </label>
             <label>Teléfono
               <input name="phone" type="tel" minlength="5" maxlength="32" required />
             </label>
-            <label>Contraseña temporal (mínimo 12 caracteres)
-              <input name="password" type="password" minlength="12" required />
+            <label>Contraseña temporal
+              <input name="password" type="password" minlength="8" maxlength="72" pattern="(?=.*[A-ZÁÉÍÓÚÑ])(?=.*\d)(?=.*[^A-Za-z0-9\s]).{8,72}" title="Mínimo 8 caracteres, una mayúscula, un número y un carácter especial." required />
+              <small>8+ caracteres, una mayúscula, un número y un carácter especial.</small>
             </label>
             <label>Rol
               <select name="role" required>

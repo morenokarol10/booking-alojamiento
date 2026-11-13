@@ -915,6 +915,7 @@ async function loadMyProfile() {
     profileForm.elements.fullName.value = user.fullName || '';
     profileForm.elements.email.value = user.email || '';
     profileForm.elements.phone.value = user.phone || '';
+    profileForm.elements.cedula.value = user.cedula || '';
     profileStatus.textContent = '';
   } catch (error) {
     profileStatus.textContent =
@@ -1445,6 +1446,7 @@ async function openBookingDetails(listing) {
       profileForm.elements.fullName.value = user.fullName || '';
       profileForm.elements.email.value = user.email || '';
       profileForm.elements.phone.value = user.phone || '';
+      profileForm.elements.cedula.value = user.cedula || '';
       profileStatus.textContent =
         'Completa tu nombre, correo y teléfono. Al guardar, continuarás con esta reserva.';
       profileDialog.showModal();

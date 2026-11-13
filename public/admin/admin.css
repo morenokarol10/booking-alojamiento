@@ -1669,3 +1669,14 @@ body.auth-pending .app-shell {
   font-size: 11px;
   font-style: italic;
 }
+
+/* Cédula en la tabla de usuarios */
+.doc-number {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+.muted-cell {
+  color: #8a8f88;
+  font-size: 13px;
+  font-style: italic;
+}

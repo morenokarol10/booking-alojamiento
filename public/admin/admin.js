@@ -209,14 +209,14 @@ async function loadUsers() {
   const target = document.querySelector('#user-table-body');
   const error = document.querySelector('#user-form-error');
   error.hidden = true;
-  setLoadingRow(target, 5, 'Cargando usuarios…');
+  setLoadingRow(target, 6, 'Cargando usuarios…');
   try {
     const result = await apiRequest('/admin/usuarios');
     const users = Array.isArray(result?.data) ? result.data : null;
     if (!users)
       throw new Error('La API devolvió una lista de usuarios no válida.');
     if (!users.length) {
-      setLoadingRow(target, 5, 'No hay cuentas registradas.');
+      setLoadingRow(target, 6, 'No hay cuentas registradas.');
       return;
     }
     target.innerHTML = users
@@ -224,7 +224,8 @@ async function loadUsers() {
         (user) => `
         <tr>
           <td><div class="guest-cell"><strong>${escapeHtml(user.fullName || 'Sin nombre')}</strong><small>${escapeHtml(user.email)}</small></div></td>
-          <td>${escapeHtml(user.phone || '—')}${user.cedula ? `<small>Cédula ${escapeHtml(user.cedula)}</small>` : ''}</td>
+          <td>${user.cedula ? `<span class="doc-number">${escapeHtml(user.cedula)}</span>` : '<span class="muted-cell" title="La cuenta puede agregarla en Mi perfil">Sin cédula</span>'}</td>
+          <td>${escapeHtml(user.phone || '—')}</td>
           <td>
             <select class="user-role-select" data-user-id="${escapeHtml(user.id)}" aria-label="Rol de ${escapeHtml(user.email)}" ${user.id === currentUser?.id ? 'disabled' : ''}>
               <option value="admin" ${user.role === 'admin' ? 'selected' : ''}>Administrador</option>
@@ -238,7 +239,7 @@ async function loadUsers() {
       )
       .join('');
   } catch (requestError) {
-    setLoadingRow(target, 5, 'No se pudieron cargar los usuarios.');
+    setLoadingRow(target, 6, 'No se pudieron cargar los usuarios.');
     error.textContent = requestError.message;
     error.hidden = false;
   }

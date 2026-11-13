@@ -11,6 +11,8 @@ describe('AdminService account management', () => {
       user_metadata: {
         full_name: 'Personal de prueba',
         phone: '+593991234567',
+        cedula: '1600222176',
+        tipo_documento: 'CEDULA',
       },
       email_confirmed_at: '2026-10-11T00:00:00.000Z',
     };
@@ -19,7 +21,14 @@ describe('AdminService account management', () => {
       error: null,
     });
     const service = new AdminService({
-      auth: { admin: { createUser } },
+      auth: {
+        admin: {
+          createUser,
+          listUsers: jest
+            .fn()
+            .mockResolvedValue({ data: { users: [] }, error: null }),
+        },
+      },
     } as unknown as SupabaseClient);
 
     const response = await service.createUser({
@@ -27,6 +36,7 @@ describe('AdminService account management', () => {
       phone: '+593991234567',
       email: 'staff@example.com',
       password: 'UsuarioSeguro123!',
+      cedula: '1600222176',
       role: 'empleado',
     });
 
@@ -38,6 +48,8 @@ describe('AdminService account management', () => {
       user_metadata: {
         full_name: 'Personal de prueba',
         phone: '+593991234567',
+        cedula: '1600222176',
+        tipo_documento: 'CEDULA',
       },
     });
     expect(response.data.role).toBe('empleado');

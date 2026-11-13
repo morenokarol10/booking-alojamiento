@@ -100,6 +100,75 @@ loginForm.addEventListener('submit', (event) => {
   event.preventDefault();
   if (loginForm.reportValidity()) void submitAuth(loginForm, 'login');
 });
+// ---- Reglas de cuenta: cédula ecuatoriana y contraseña segura ----
+const PASSWORD_RULES = {
+  length: (value) => value.length >= 8,
+  upper: (value) => /[A-ZÁÉÍÓÚÑ]/.test(value),
+  number: (value) => /\d/.test(value),
+  special: (value) => /[^A-Za-z0-9\s]/.test(value),
+};
+
+function isValidEcuadorianCedula(value) {
+  if (!/^[0-9]{10}$/.test(value)) return false;
+  const province = Number(value.slice(0, 2));
+  if (province < 1 || province > 24 || Number(value[2]) > 5) return false;
+  const sum = value
+    .slice(0, 9)
+    .split('')
+    .reduce((total, digit, index) => {
+      const weighted = index % 2 === 0 ? Number(digit) * 2 : Number(digit);
+      return total + (weighted > 9 ? weighted - 9 : weighted);
+    }, 0);
+  return (10 - (sum % 10)) % 10 === Number(value[9]);
+}
+
+const registerPassword = registerForm.elements.password;
+const registerCedula = registerForm.elements.cedula;
+const cedulaHint = document.querySelector('#register-cedula-hint');
+
+function updatePasswordRules() {
+  const value = registerPassword.value;
+  let allValid = true;
+  for (const item of document.querySelectorAll('#register-password-rules [data-rule]')) {
+    const ok = PASSWORD_RULES[item.dataset.rule](value);
+    allValid &&= ok;
+    item.classList.toggle('ok', ok);
+  }
+  registerPassword.setCustomValidity(
+    allValid
+      ? ''
+      : 'La contraseña necesita 8 caracteres, una mayúscula, un número y un carácter especial.',
+  );
+}
+
+function updateCedulaHint() {
+  const value = registerCedula.value.trim();
+  const valid = isValidEcuadorianCedula(value);
+  registerCedula.setCustomValidity(
+    value.length === 10 && !valid ? 'La cédula no es válida.' : '',
+  );
+  cedulaHint.dataset.state = value.length === 10 ? (valid ? 'ok' : 'error') : '';
+  cedulaHint.textContent =
+    value.length === 10
+      ? valid
+        ? 'Cédula válida.'
+        : 'Esta cédula no es válida: revisa los dígitos.'
+      : '10 dígitos. La pide Booking para identificarte.';
+}
+
+registerPassword.addEventListener('input', updatePasswordRules);
+registerCedula.addEventListener('input', () => {
+  registerCedula.value = registerCedula.value.replace(/\D/g, '').slice(0, 10);
+  updateCedulaHint();
+});
+registerForm.addEventListener('reset', () => {
+  window.setTimeout(() => {
+    updatePasswordRules();
+    updateCedulaHint();
+  });
+});
+updatePasswordRules();
+
 registerForm.addEventListener('submit', (event) => {
   event.preventDefault();
   if (registerForm.reportValidity()) {

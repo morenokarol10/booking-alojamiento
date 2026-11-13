@@ -1662,3 +1662,10 @@ body.auth-pending .app-shell {
   color: #8a2a1f;
   font-weight: 600;
 }
+.cancel-origin-note {
+  display: inline-block;
+  margin-top: 4px;
+  color: #5f6a62;
+  font-size: 11px;
+  font-style: italic;
+}

@@ -198,3 +198,38 @@ input:focus {
     padding: 28px 22px;
   }
 }
+
+/* Cédula y reglas de contraseña */
+.field-hint {
+  display: block;
+  margin: -6px 0 12px;
+  color: #5f6a62;
+  font-size: 12px;
+}
+.field-hint[data-state='ok'] {
+  color: #24502f;
+  font-weight: 600;
+}
+.field-hint[data-state='error'] {
+  color: #8a2a1f;
+  font-weight: 600;
+}
+.password-rules {
+  margin: -4px 0 14px;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 12px;
+  list-style: none;
+  color: #6b4a06;
+  font-size: 12px;
+}
+.password-rules li::before {
+  content: '○ ';
+}
+.password-rules li.ok {
+  color: #24502f;
+}
+.password-rules li.ok::before {
+  content: '✓ ';
+}

@@ -265,6 +265,28 @@ export class ReservationsService {
     dto: StaffCancelReservaDto,
     user: AuthenticatedUser,
   ) {
+    // Cada reserva se cancela donde se hizo: las de Booking solo las cancela
+    // Booking (POST /api/v2/alojamientos/orders/{id}/cancel) y el panel
+    // únicamente refleja ese cambio.
+    const { data: reservation, error: lookupError } = await this.supabase
+      .from('reservas')
+      .select('id, external_order_id')
+      .eq('id', reservationId)
+      .maybeSingle();
+    if (lookupError) {
+      throw new InternalServerErrorException(
+        'No se pudo consultar la reserva para cancelarla.',
+      );
+    }
+    if (!reservation) {
+      throw new NotFoundException('No se encontró la reserva.');
+    }
+    if (reservation.external_order_id) {
+      throw new ConflictException({
+        code: 'CANCEL_ONLY_FROM_ORIGIN',
+        message: `Esta reserva se hizo en Booking (${String(reservation.external_order_id)}): solo puede cancelarse desde Booking. Cuando Booking la cancele, se verá aquí.`,
+      });
+    }
     return this.cancelWithPolicy(
       reservationId,
       dto.solicitadoPor === 'HOTEL' ? 'HOTEL' : 'ADMIN',

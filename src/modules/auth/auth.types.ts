@@ -11,6 +11,7 @@ export interface AuthenticatedUser {
   role: UserRole;
   fullName?: string;
   phone?: string;
+  cedula?: string;
   savedPaymentMethod?: SavedPaymentMethod;
 }
 

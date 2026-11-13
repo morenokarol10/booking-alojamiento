@@ -1,10 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
-import {
-  IsEmail,
-  IsString,
-  MaxLength,
-  MinLength,
-} from 'class-validator';
+import { Transform } from 'class-transformer';
+import { IsEcuadorianCedula, IsStrongPassword } from '../account-rules';
+import { IsEmail, IsString, MaxLength, MinLength } from 'class-validator';
 
 export class RegisterDto {
   @ApiProperty({ example: 'María Pérez', minLength: 2, maxLength: 160 })
@@ -23,8 +20,23 @@ export class RegisterDto {
   @IsEmail()
   email!: string;
 
-  @ApiProperty({ minLength: 12, example: 'ClienteSeguro123!' })
-  @IsString()
-  @MinLength(12)
+  @ApiProperty({
+    minLength: 8,
+    example: 'Cliente1!',
+    description:
+      'Mínimo 8 caracteres, una mayúscula, un número y un carácter especial.',
+  })
+  @IsStrongPassword()
   password!: string;
+
+  @ApiProperty({
+    example: '1600222176',
+    description:
+      'Cédula ecuatoriana (la pide Booking para identificar al huésped).',
+  })
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @IsEcuadorianCedula()
+  cedula!: string;
 }

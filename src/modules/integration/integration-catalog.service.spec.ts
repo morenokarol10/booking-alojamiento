@@ -1,4 +1,7 @@
-import { IntegrationCatalogService } from './integration-catalog.service';
+import {
+  IntegrationCatalogService,
+  photoUrls,
+} from './integration-catalog.service';
 
 describe('IntegrationCatalogService property endpoints', () => {
   const accommodation = {
@@ -37,13 +40,7 @@ describe('IntegrationCatalogService property endpoints', () => {
   const createService = () => {
     const makeQuery = (result: unknown, table: string) => {
       const builder: Record<string, jest.Mock> = {};
-      for (const method of [
-        'select',
-        'eq',
-        'in',
-        'neq',
-        'gte',
-      ]) {
+      for (const method of ['select', 'eq', 'in', 'neq', 'gte']) {
         builder[method] = jest.fn(() => builder);
       }
       builder.order = jest.fn().mockResolvedValue(result);
@@ -73,9 +70,7 @@ describe('IntegrationCatalogService property endpoints', () => {
       Promise.resolve(
         name === 'alojamientos_v2_disponibilidad'
           ? {
-              data: [
-                { habitaciones_remanentes: 2, habitaciones_totales: 3 },
-              ],
+              data: [{ habitaciones_remanentes: 2, habitaciones_totales: 3 }],
               error: null,
             }
           : { data: null, error: null },
@@ -108,9 +103,7 @@ describe('IntegrationCatalogService property endpoints', () => {
   it('returns room types with the booking integration fields', async () => {
     const { service } = createService();
 
-    await expect(
-      service.rooms('HTL-QUITO-C62FE3F1'),
-    ).resolves.toEqual([
+    await expect(service.rooms('HTL-QUITO-C62FE3F1')).resolves.toEqual([
       {
         codigo: 'HABITACION_ESTANDAR',
         nombre: 'Habitación estándar',
@@ -205,5 +198,17 @@ describe('IntegrationCatalogService property endpoints', () => {
       camas: 1,
       descripcion_camas: '1 cama',
     });
+  });
+});
+
+describe('photoUrls', () => {
+  it('reads photos stored as a JSON text column or as an array', () => {
+    expect(photoUrls('["https://example.com/a.jpg"]')).toEqual([
+      'https://example.com/a.jpg',
+    ]);
+    expect(photoUrls(['https://example.com/b.jpg'])).toEqual([
+      'https://example.com/b.jpg',
+    ]);
+    expect(photoUrls(null)).toEqual([]);
   });
 });

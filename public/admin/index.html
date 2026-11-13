@@ -41,6 +41,9 @@
           <span class="nav-icon" aria-hidden="true">▤</span> Reservas
           <span class="nav-count" id="nav-booking-count">—</span>
         </a>
+        <a class="side-link" href="#guests">
+          <span class="nav-icon" aria-hidden="true">☺</span> Huéspedes
+        </a>
         <a class="side-link admin-only" href="#events">
           <span class="nav-icon" aria-hidden="true">⌁</span> Eventos EDA
         </a>
@@ -294,6 +297,59 @@
               </thead>
               <tbody id="user-table-body">
                 <tr><td colspan="5" class="loading-cell">Cargando usuarios…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section
+          class="data-section"
+          id="guests"
+          aria-labelledby="guests-title"
+        >
+          <div class="section-heading">
+            <div class="section-title-group">
+              <div class="section-icon lilac" aria-hidden="true">☺</div>
+              <div>
+                <h2 id="guests-title">Huéspedes</h2>
+                <p>Registro de huéspedes con los datos que pide Booking: cédula, nombre y correo.</p>
+              </div>
+            </div>
+            <button class="button button-light" id="refresh-guests" type="button">
+              <span aria-hidden="true">↻</span> Actualizar
+            </button>
+          </div>
+          <form id="guest-create-form" class="user-create-form" novalidate>
+            <label>Cédula / identificación <span class="required">*</span>
+              <input name="identificacion" type="text" inputmode="numeric" maxlength="13" required placeholder="Ej. 1600222176" autocomplete="off" />
+            </label>
+            <label>Nombre completo <span class="required">*</span>
+              <input name="nombreCompleto" type="text" minlength="3" maxlength="120" required placeholder="Ej. Juan López" />
+            </label>
+            <label>Correo electrónico <span class="required">*</span>
+              <input name="email" type="email" maxlength="120" required placeholder="nombre@correo.com" />
+            </label>
+            <label>Teléfono <small>(opcional)</small>
+              <input name="telefono" type="tel" maxlength="16" placeholder="Ej. 0991234567" />
+            </label>
+            <button class="button button-primary" type="submit">Guardar huésped</button>
+          </form>
+          <p class="guest-form-hint" id="guest-form-hint" aria-live="polite">
+            La cédula ecuatoriana se valida automáticamente. Si el correo ya existe, se actualizan sus datos.
+          </p>
+          <div class="inline-error" id="guest-form-error" role="alert" hidden></div>
+          <div class="table-shell">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th scope="col">HUÉSPED</th>
+                  <th scope="col">IDENTIFICACIÓN</th>
+                  <th scope="col">TELÉFONO</th>
+                  <th scope="col">ACTUALIZADO</th>
+                </tr>
+              </thead>
+              <tbody id="guest-table-body">
+                <tr><td colspan="4" class="loading-cell">Cargando huéspedes…</td></tr>
               </tbody>
             </table>
           </div>

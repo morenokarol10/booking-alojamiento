@@ -846,6 +846,7 @@ async function initializeAdmin() {
     await Promise.all([
       loadListings(),
       loadBookings(),
+      loadGuests(),
       ...(user.role === 'admin' ? [loadEvents(), loadUsers()] : []),
     ]);
   } catch (error) {
@@ -1081,6 +1082,108 @@ roomList.addEventListener('click', (event) => {
   remove.closest('.room-row').remove();
   updateRoomSummary();
 });
+
+// ---- Huéspedes (los mismos datos que Booking: cédula, nombre y correo) ----
+const DOCUMENT_LABELS = { CEDULA: 'Cédula', PASAPORTE: 'Pasaporte', RUC: 'RUC' };
+const guestForm = document.querySelector('#guest-create-form');
+const guestError = document.querySelector('#guest-form-error');
+const guestHint = document.querySelector('#guest-form-hint');
+
+// Mismo algoritmo (módulo 10) que valida el backend.
+function isValidEcuadorianId(value) {
+  if (!/^[0-9]{10}$/.test(value)) return false;
+  const province = Number(value.slice(0, 2));
+  if (province < 1 || province > 24 || Number(value[2]) > 5) return false;
+  const sum = value
+    .slice(0, 9)
+    .split('')
+    .reduce((total, digit, index) => {
+      const weighted = index % 2 === 0 ? Number(digit) * 2 : Number(digit);
+      return total + (weighted > 9 ? weighted - 9 : weighted);
+    }, 0);
+  return (10 - (sum % 10)) % 10 === Number(value[9]);
+}
+
+async function loadGuests() {
+  const target = document.querySelector('#guest-table-body');
+  setLoadingRow(target, 4, 'Cargando huéspedes…');
+  try {
+    const result = await apiRequest('/admin/clientes');
+    const guests = Array.isArray(result?.data) ? result.data : [];
+    if (!guests.length) {
+      setLoadingRow(target, 4, 'Todavía no hay huéspedes registrados.');
+      return;
+    }
+    target.innerHTML = guests
+      .map(
+        (guest) => `
+          <tr>
+            <td><div class="guest-cell"><strong>${escapeHtml(guest.nombreCompleto)}</strong><small>${escapeHtml(guest.email)}</small></div></td>
+            <td><div class="guest-cell"><strong>${escapeHtml(guest.identificacion)}</strong><small>${escapeHtml(DOCUMENT_LABELS[guest.tipoDocumento] || guest.tipoDocumento)}</small></div></td>
+            <td>${escapeHtml(guest.telefono || '—')}</td>
+            <td>${formatDate(guest.updatedAt, true)}</td>
+          </tr>`,
+      )
+      .join('');
+  } catch (requestError) {
+    setLoadingRow(target, 4, 'No se pudieron cargar los huéspedes.');
+    guestError.textContent = requestError.message;
+    guestError.hidden = false;
+  }
+}
+
+guestForm.elements.identificacion.addEventListener('input', () => {
+  const value = guestForm.elements.identificacion.value.trim();
+  guestHint.dataset.state =
+    value.length === 10 ? (isValidEcuadorianId(value) ? 'ok' : 'error') : '';
+  guestHint.textContent =
+    value.length === 10
+      ? isValidEcuadorianId(value)
+        ? 'Cédula ecuatoriana válida.'
+        : 'Esta cédula no es válida: revisa los dígitos.'
+      : 'La cédula ecuatoriana se valida automáticamente. Si el correo ya existe, se actualizan sus datos.';
+});
+
+guestForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  guestError.hidden = true;
+  const identificacion = guestForm.elements.identificacion.value
+    .trim()
+    .toUpperCase();
+  if (!guestForm.reportValidity()) return;
+  if (/^[0-9]{10}$/.test(identificacion) && !isValidEcuadorianId(identificacion)) {
+    guestError.textContent = 'La cédula ecuatoriana no es válida.';
+    guestError.hidden = false;
+    guestForm.elements.identificacion.focus();
+    return;
+  }
+  const telefono = guestForm.elements.telefono.value.trim();
+  const button = guestForm.querySelector('button[type="submit"]');
+  setButtonBusy(button, true, 'Guardando…');
+  try {
+    const result = await apiRequest('/admin/clientes', {
+      method: 'POST',
+      body: JSON.stringify({
+        identificacion,
+        nombreCompleto: guestForm.elements.nombreCompleto.value.trim(),
+        email: guestForm.elements.email.value.trim(),
+        ...(telefono ? { telefono } : {}),
+      }),
+    });
+    showToast(
+      `Huésped ${result?.data?.nombreCompleto || ''} guardado correctamente.`,
+    );
+    guestForm.reset();
+    guestHint.dataset.state = '';
+    await loadGuests();
+  } catch (requestError) {
+    guestError.textContent = requestError.message;
+    guestError.hidden = false;
+  } finally {
+    setButtonBusy(button, false, 'Guardar huésped');
+  }
+});
+document.querySelector('#refresh-guests').addEventListener('click', loadGuests);
 
 void initializeAdmin();
 window.setInterval(() => {

@@ -1647,3 +1647,18 @@ body.auth-pending .app-shell {
     grid-column: 1 / -1;
   }
 }
+
+/* Huéspedes */
+.guest-form-hint {
+  margin: -6px 0 12px;
+  color: #5f6a62;
+  font-size: 12px;
+}
+.guest-form-hint[data-state='ok'] {
+  color: #24502f;
+  font-weight: 600;
+}
+.guest-form-hint[data-state='error'] {
+  color: #8a2a1f;
+  font-weight: 600;
+}

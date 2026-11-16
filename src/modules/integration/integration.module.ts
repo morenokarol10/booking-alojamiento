@@ -21,10 +21,11 @@ import { IntegrationCustomerService } from './integration-customer.service';
   controllers: [
     AdminCustomerController,
     IntegrationHealthController,
+    // Antes del catálogo: GET /eventos debe ganar a GET /:id.
+    IntegrationFeedController,
     IntegrationCatalogController,
     IntegrationOrderController,
     IntegrationReservationController,
-    IntegrationFeedController,
     IntegrationCustomerController,
   ],
   providers: [
